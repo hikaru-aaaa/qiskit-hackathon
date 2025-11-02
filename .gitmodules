@@ -1,0 +1,3 @@
+[submodule "external/QSVTinQiskit"]
+	path = external/QSVTinQiskit
+	url = git@github.com:bartubisgin/QSVTinQiskit-2021-Europe-Hackathon-Winning-Project-.git
