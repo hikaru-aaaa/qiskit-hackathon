@@ -4,10 +4,14 @@
 
 PennyLaneの`BlockEncode`アルゴリズムを正確に移植しました。
 
-### 最新の修正：QSVTシーケンスと角度計算（2025-11-02）
+### 最新の修正：完全なQiskit実装（2025-11-02）
 
-#### 修正1: 角度計算
-`compute_qsvt_angles`関数をPennyLaneの`poly_to_angles`を使用するように修正。
+#### 修正1: 純粋NumPy/SciPy角度計算
+`poly_to_angles`をPennyLaneの実装から純粋なNumPy/SciPyで再実装しました（`poly_to_angles_qiskit.py`）。
+- PennyLaneへの依存関係を完全に削除
+- Chebyshev多項式変換を使用
+- 補完多項式の計算
+- arXiv:2105.02859とarXiv:2406.04246に基づく
 
 #### 修正2: QSVTゲートシーケンス
 PennyLaneの`QSVT.compute_decomposition`に完全準拠：

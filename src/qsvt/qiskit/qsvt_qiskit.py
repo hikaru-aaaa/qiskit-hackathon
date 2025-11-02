@@ -155,7 +155,8 @@ def compute_qsvt_angles(poly_coeffs):
     """
     Compute the phase angles for QSVT from polynomial coefficients.
 
-    Uses PennyLane's poly_to_angles function for accurate angle computation.
+    Uses pure NumPy/SciPy implementation based on PennyLane's algorithm.
+    Based on arXiv:2105.02859 and arXiv:2406.04246.
 
     Args:
         poly_coeffs: Polynomial coefficients
@@ -163,34 +164,10 @@ def compute_qsvt_angles(poly_coeffs):
     Returns:
         List of phase angles
     """
-    try:
-        # Use PennyLane's poly_to_angles for accurate computation
-        import pennylane as qml
+    from poly_to_angles_qiskit import poly_to_angles
 
-        angles = qml.poly_to_angles(poly_coeffs, "QSVT", angle_solver="root-finding")
-        return np.asarray(angles)
-    except ImportError:
-        # Fallback: simplified angle computation (not accurate)
-        import warnings
-
-        warnings.warn(
-            "PennyLane not available. Using simplified angle computation. "
-            "Results may not match expected polynomial transformation. "
-            "Install PennyLane for accurate QSVT: pip install pennylane"
-        )
-
-        # Very simplified fallback - will NOT produce correct results
-        degree = len([c for c in poly_coeffs if c != 0])
-        angles = []
-        for i, coef in enumerate(poly_coeffs):
-            if coef != 0:
-                angle = np.arctan(coef) * (i + 1) / len(poly_coeffs)
-                angles.append(angle)
-
-        while len(angles) < degree:
-            angles.append(0.0)
-
-        return angles
+    angles = poly_to_angles(poly_coeffs, "QSVT", angle_solver="root-finding")
+    return np.asarray(angles)
 
 
 def qsvt(matrix_or_value, poly_coeffs, encoding_wires, block_encoding="embedding"):

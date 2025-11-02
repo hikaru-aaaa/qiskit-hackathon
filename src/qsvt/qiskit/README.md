@@ -26,6 +26,7 @@ qc = block_encode(B, list(range(2)))  # 2 qubits (標準版は3 qubits必要)
 
 - `qsvt_qiskit.py`: QSVT実装のメインモジュール（標準的なアルゴリズム）
 - `qsvt_qiskit_pennylane.py`: **PennyLane互換実装** ✨（長方行列でより効率的）
+- `poly_to_angles_qiskit.py`: **純粋NumPy/SciPy角度計算** 🆕（PennyLane不要）
 - `intro_qsvt_qiskit.ipynb`: サンプルノートブック（PennyLane版の移植）
 - `README_PENNYLANE.md`: PennyLane互換版の詳細説明
 - **`USAGE.md`: 使い方ガイド（どちらを使うべきか）** 📖
