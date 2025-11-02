@@ -10,7 +10,12 @@ from qiskit.quantum_info import Operator
 
 def block_encode(matrix, wires):
     """
-    Block encode a matrix into a unitary operator.
+    Block encode a matrix into a unitary operator using the standard block encoding scheme.
+
+    For a matrix A (m x n), this creates a unitary U such that:
+    U = [[A,      B    ],
+         [C,      D    ]]
+    where B, C, D are chosen to make U unitary.
 
     Args:
         matrix: Matrix to encode (can be non-square)
@@ -19,37 +24,91 @@ def block_encode(matrix, wires):
     Returns:
         QuantumCircuit with the block encoding
     """
-    matrix = np.asarray(matrix)
-    m, n = matrix.shape if matrix.ndim > 1 else (1, matrix.size)
+    matrix = np.asarray(matrix, dtype=complex)
+
+    # Handle scalar or 1D array
+    if matrix.ndim == 0:
+        matrix = np.array([[matrix]])
+    elif matrix.ndim == 1:
+        matrix = matrix.reshape(-1, 1)
+
+    m, n = matrix.shape
 
     # Determine the size needed for block encoding
-    max_dim = max(m, n)
     num_qubits = len(wires)
     block_size = 2**num_qubits
 
-    if max_dim > block_size:
+    # Block encoding creates a 2x2 block structure, so we need 2*size <= block_size
+    max_dim = max(m, n)
+
+    # The block encoded matrix will be 2*max_dim x 2*max_dim
+    if 2 * max_dim > block_size:
         raise ValueError(
-            f"Matrix dimension {max_dim} requires more than {num_qubits} qubits"
+            f"Matrix dimension {max_dim} requires block encoding size {2 * max_dim}, "
+            f"but only {block_size} available with {num_qubits} qubits. "
+            f"Need at least {int(np.ceil(np.log2(2 * max_dim)))} qubits."
         )
 
-    # Create block encoded unitary
-    U = np.zeros((block_size, block_size), dtype=complex)
+    # Pad matrix to square if needed
+    if m != n:
+        size = max(m, n)
+        A_padded = np.zeros((size, size), dtype=complex)
+        A_padded[:m, :n] = matrix
+        matrix = A_padded
+        m = n = size
 
-    # Place matrix in top-left corner
-    U[:m, :n] = matrix
+    # Standard block encoding algorithm
+    # U = [[A,              sqrt(I - A*A^†)  ],
+    #      [sqrt(I - A^†*A), -A^†            ]]
 
-    # Complete to unitary using SVD approach
-    # Fill remaining entries to make it unitary
-    if m < block_size or n < block_size:
-        # Simple completion: make orthogonal columns/rows
-        for i in range(m, block_size):
-            U[i, i] = 1.0
+    # Compute A*A^† and A^†*A
+    AA_dag = matrix @ matrix.conj().T
+    A_dag_A = matrix.conj().T @ matrix
 
-        # Gram-Schmidt orthogonalization to ensure unitarity
-        from scipy.linalg import qr
+    # Compute sqrt(I - A*A^†) and sqrt(I - A^†*A)
+    # Using eigenvalue decomposition for matrix square root
+    from scipy.linalg import sqrtm
 
-        Q, R = qr(U)
-        U = Q
+    I_m = np.eye(m, dtype=complex)
+
+    # Compute complementary matrices
+    try:
+        B = sqrtm(I_m - AA_dag)  # sqrt(I - A*A^†)
+        C = sqrtm(I_m - A_dag_A)  # sqrt(I - A^†*A)
+    except (ValueError, np.linalg.LinAlgError):
+        # If sqrt fails, use pseudo-inverse approach
+        eigvals_AA = np.linalg.eigvalsh(AA_dag)
+        eigvals_ATA = np.linalg.eigvalsh(A_dag_A)
+
+        # Ensure eigenvalues are <= 1 (numerical stability)
+        if np.any(eigvals_AA > 1.0001) or np.any(eigvals_ATA > 1.0001):
+            # Normalize A if needed
+            max_eigval = max(np.max(eigvals_AA), np.max(eigvals_ATA))
+            matrix = matrix / np.sqrt(max_eigval + 1e-10)
+            AA_dag = matrix @ matrix.conj().T
+            A_dag_A = matrix.conj().T @ matrix
+
+        B = sqrtm(I_m - AA_dag)
+        C = sqrtm(I_m - A_dag_A)
+
+    D = -matrix.conj().T  # -A^†
+
+    # Construct the block-encoded unitary (2m x 2m for square matrix)
+    U_block = np.block([[matrix, B], [C, D]])
+
+    # Pad to full block_size if needed
+    if 2 * m < block_size:
+        U = np.eye(block_size, dtype=complex)
+        U[: 2 * m, : 2 * m] = U_block
+    else:
+        U = U_block
+
+    # Ensure the result is as close to unitary as possible
+    # (numerical cleanup)
+    from scipy.linalg import polar
+
+    U_unitary, _ = polar(U)
+    U = U_unitary
 
     # Create quantum circuit
     qc = QuantumCircuit(num_qubits)
@@ -96,8 +155,7 @@ def compute_qsvt_angles(poly_coeffs):
     """
     Compute the phase angles for QSVT from polynomial coefficients.
 
-    This is a simplified version - full implementation would use more
-    sophisticated polynomial transformation algorithms.
+    Uses PennyLane's poly_to_angles function for accurate angle computation.
 
     Args:
         poly_coeffs: Polynomial coefficients
@@ -105,25 +163,34 @@ def compute_qsvt_angles(poly_coeffs):
     Returns:
         List of phase angles
     """
-    # Simplified angle computation
-    # In practice, this requires solving optimization problem
-    # or using specific polynomial-to-angle conversion algorithms
+    try:
+        # Use PennyLane's poly_to_angles for accurate computation
+        import pennylane as qml
 
-    degree = len([c for c in poly_coeffs if c != 0])
+        angles = qml.poly_to_angles(poly_coeffs, "QSVT", angle_solver="root-finding")
+        return np.asarray(angles)
+    except ImportError:
+        # Fallback: simplified angle computation (not accurate)
+        import warnings
 
-    # For demonstration, use simple heuristic based on coefficients
-    angles = []
-    for i, coef in enumerate(poly_coeffs):
-        if coef != 0:
-            # Scale angle based on coefficient and position
-            angle = np.arctan(coef) * (i + 1) / len(poly_coeffs)
-            angles.append(angle)
+        warnings.warn(
+            "PennyLane not available. Using simplified angle computation. "
+            "Results may not match expected polynomial transformation. "
+            "Install PennyLane for accurate QSVT: pip install pennylane"
+        )
 
-    # Ensure we have right number of angles
-    while len(angles) < degree:
-        angles.append(0.0)
+        # Very simplified fallback - will NOT produce correct results
+        degree = len([c for c in poly_coeffs if c != 0])
+        angles = []
+        for i, coef in enumerate(poly_coeffs):
+            if coef != 0:
+                angle = np.arctan(coef) * (i + 1) / len(poly_coeffs)
+                angles.append(angle)
 
-    return angles
+        while len(angles) < degree:
+            angles.append(0.0)
+
+        return angles
 
 
 def qsvt(matrix_or_value, poly_coeffs, encoding_wires, block_encoding="embedding"):
@@ -165,25 +232,35 @@ def qsvt(matrix_or_value, poly_coeffs, encoding_wires, block_encoding="embedding
     U_A = block_encode(matrix, wires[:-1] if num_qubits > 1 else wires)
 
     # QSVT sequence: alternate between projector phases and block encoding
-    dim = 2 ** (num_qubits - 1) if num_qubits > 1 else 1
+    # Following PennyLane's compute_decomposition logic
 
-    for i, angle in enumerate(angles):
-        # Apply projector-controlled phase
-        if i == 0:
-            # Initial phase
-            qc_phase = pc_phase(angle, dim, wires)
-            qc.compose(qc_phase, inplace=True)
+    # Determine dimension for PCPhase
+    if np.isscalar(matrix_or_value):
+        # Scalar case: all PCPhase operations use dim=1
+        dims = [1] * len(angles)
+    else:
+        # Matrix case: dim alternates between columns (m) and rows (n)
+        shape_a = matrix.shape if matrix.ndim > 1 else (1, matrix.size)
+        n, m = shape_a
+        # Based on PennyLane's _tensorlike_process:
+        # dim = c if idx % 2 else r (where c=rows, r=columns)
+        dims = [m if i % 2 == 0 else n for i in range(len(angles))]
 
-        # Apply block encoding (or its adjoint)
-        if i < len(angles) - 1:
-            if i % 2 == 0:
-                qc.compose(U_A, inplace=True)
-            else:
-                qc.compose(U_A.inverse(), inplace=True)
+    # Build QSVT circuit following PennyLane's pattern
+    for idx in range(len(angles) - 1):
+        # Add projector
+        qc_phase = pc_phase(angles[idx], dims[idx], wires)
+        qc.compose(qc_phase, inplace=True)
 
-            # Apply next phase
-            qc_phase = pc_phase(angles[i + 1], dim, wires)
-            qc.compose(qc_phase, inplace=True)
+        # Add block encoding or its adjoint
+        if idx % 2 == 0:
+            qc.compose(U_A, inplace=True)  # U
+        else:
+            qc.compose(U_A.inverse(), inplace=True)  # U†
+
+    # Add final projector
+    qc_phase = pc_phase(angles[-1], dims[-1], wires)
+    qc.compose(qc_phase, inplace=True)
 
     return qc
 
