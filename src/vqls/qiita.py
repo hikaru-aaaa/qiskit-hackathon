@@ -440,14 +440,14 @@ def compute_solution_fidelity(
     psi = result.get_statevector(circ, decimals=10)
 
     # Build matrix A from gate specifications
-    # a1 corresponds to Z gate on last qubit (coefficient_set[1])
-    a1 = coefficient_set[1] * np.diag([1, 1, 1, 1, -1, -1, -1, -1])
+    a2 = coefficient_set[2] * np.diag([1, 1, 1, 1, -1, -1, -1, -1])
 
-    # a2 corresponds to identity (coefficient_set[0])
-    a2 = coefficient_set[0] * np.eye(8)
+    a1 = coefficient_set[1] * np.diag([1, 1, -1, -1, 1, 1, -1, -1])
+
+    a0 = coefficient_set[0] * np.eye(8)
 
     # Total matrix A
-    matrix_a = a1 + a2
+    matrix_a = a0 + a1 + a2
 
     # Compute A|ψ⟩
     a_psi = matrix_a.dot(psi)
@@ -475,7 +475,7 @@ def main() -> None:
 
     # Define the linear system
     coefficient_set = [0.55, 0.225, 0.225]  # Coefficients
-    gate_set = [[0, 0, 0], [0, 1, 1]]  # Gate specifications
+    gate_set = [[0, 0, 0], [0, 1, 0], [0, 0, 1]]  # Gate specifications
 
     # Solve VQLS
     print("\nStarting optimization...")
