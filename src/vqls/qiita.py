@@ -31,9 +31,7 @@ NUM_QUBITS = 5
 
 
 def apply_fixed_ansatz(
-    circ: QuantumCircuit,
-    qubits: List[int],
-    parameters: List[List[float]]
+    circ: QuantumCircuit, qubits: List[int], parameters: List[List[float]]
 ) -> QuantumCircuit:
     """
     Apply a fixed hardware-efficient ansatz to the quantum circuit.
@@ -76,7 +74,7 @@ def control_fixed_ansatz(
     qubits: List[int],
     parameters: List[List[float]],
     control_qubit: int,
-    reg: Union[int, None] = None
+    reg: Union[int, None] = None,
 ) -> QuantumCircuit:
     """
     Apply controlled version of the fixed ansatz using an ancilla qubit.
@@ -131,9 +129,7 @@ def control_fixed_ansatz(
 
 
 def control_b(
-    circ: QuantumCircuit,
-    control_qubit: int,
-    qubits: List[int]
+    circ: QuantumCircuit, control_qubit: int, qubits: List[int]
 ) -> QuantumCircuit:
     """
     Apply controlled-Hadamard gates to prepare the |b⟩ state.
@@ -160,7 +156,7 @@ def hadamard_test(
     gate_type: List[List[int]],
     qubits: List[int],
     ancilla_index: int,
-    parameters: List[List[float]]
+    parameters: List[List[float]],
 ) -> QuantumCircuit:
     """
     Implement the Hadamard test circuit for computing ⟨ψ|A†A|ψ⟩.
@@ -206,7 +202,7 @@ def special_hadamard_test(
     qubits: List[int],
     ancilla_index: int,
     parameters: List[List[float]],
-    reg: Union[int, None] = None
+    reg: Union[int, None] = None,
 ) -> QuantumCircuit:
     """
     Implement special Hadamard test for computing ⟨b|A†|ψ⟩ terms.
@@ -271,7 +267,7 @@ def calculate_vqls_cost(
     parameters: np.ndarray,
     coefficient_set: List[float],
     gate_set: List[List[int]],
-    simulator: AerSimulator
+    simulator: AerSimulator,
 ) -> float:
     """
     Calculate the VQLS cost function: C = 1 - |⟨b|A†|ψ⟩|² / ⟨ψ|A†A|ψ⟩.
@@ -313,7 +309,7 @@ def calculate_vqls_cost(
                 [gate_set[i], gate_set[j]],
                 WORK_QUBITS,
                 ANCILLA_QUBIT,
-                param_layers
+                param_layers,
             )
 
             # Simulate and extract statevector
@@ -348,12 +344,7 @@ def calculate_vqls_cost(
 
                 # Build special Hadamard test circuit
                 circ = special_hadamard_test(
-                    circ,
-                    selected_gate,
-                    WORK_QUBITS,
-                    ANCILLA_QUBIT,
-                    param_layers,
-                    None
+                    circ, selected_gate, WORK_QUBITS, ANCILLA_QUBIT, param_layers, None
                 )
 
                 # Simulate and extract statevector
@@ -382,7 +373,7 @@ def solve_vqls(
     coefficient_set: List[float],
     gate_set: List[List[int]],
     max_iterations: int = 200,
-    random_seed: Union[int, None] = None
+    random_seed: Union[int, None] = None,
 ) -> OptimizeResult:
     """
     Solve the VQLS problem using variational optimization.
@@ -405,14 +396,16 @@ def solve_vqls(
     simulator = AerSimulator()
 
     # Generate random initial parameters in [0, 3]
-    initial_params = [float(random.randint(0, 3000)) / 1000 for _ in range(9)]
+    initial_params = [float(random.randint(0, 3000)) / 200 for _ in range(9)]
 
     # Run optimization
     result = minimize(
-        fun=lambda params: calculate_vqls_cost(params, coefficient_set, gate_set, simulator),
+        fun=lambda params: calculate_vqls_cost(
+            params, coefficient_set, gate_set, simulator
+        ),
         x0=initial_params,
         method="COBYLA",
-        options={"maxiter": max_iterations}
+        options={"maxiter": max_iterations},
     )
 
     return result
@@ -421,7 +414,7 @@ def solve_vqls(
 def compute_solution_fidelity(
     optimal_parameters: List[List[float]],
     coefficient_set: List[float],
-    target_vector: np.ndarray
+    target_vector: np.ndarray,
 ) -> float:
     """
     Compute the fidelity between the obtained solution and target vector.
@@ -481,15 +474,12 @@ def main() -> None:
     print("=" * 60)
 
     # Define the linear system
-    coefficient_set = [0.55, 0.45]  # Coefficients for I and Z₃
-    gate_set = [[0, 0, 0], [0, 0, 1]]  # [Identity, Z on qubit 3]
-
-    print(f"\nMatrix A = {coefficient_set[0]}*I + {coefficient_set[1]}*Z₃")
-    print("Target state |b⟩ = |+++⟩ (equal superposition)")
+    coefficient_set = [0.55, 0.225, 0.225]  # Coefficients
+    gate_set = [[0, 0, 0], [0, 1, 1]]  # Gate specifications
 
     # Solve VQLS
     print("\nStarting optimization...")
-    result = solve_vqls(coefficient_set, gate_set, max_iterations=200)
+    result = solve_vqls(coefficient_set, gate_set, max_iterations=1000)
 
     print("\n" + "=" * 60)
     print("Optimization Results:")
@@ -506,7 +496,7 @@ def main() -> None:
         print(f"  Layer {layer_idx + 1}: {[f'{p:.4f}' for p in layer]}")
 
     # Compute solution fidelity
-    target_b = np.array([1/np.sqrt(8)] * 8)  # |+++⟩ state
+    target_b = np.array([1 / np.sqrt(8)] * 8)  # |+++⟩ state
     fidelity = compute_solution_fidelity(optimal_params, coefficient_set, target_b)
 
     print("\n" + "=" * 60)

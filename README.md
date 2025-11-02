@@ -4,9 +4,32 @@
 [arxiv](https://arxiv.org/abs/1909.05820)
 [Github](https://github.com/Qiskit/textbook/blob/main/notebooks/ch-applications/vqls.ipynb)
 
-# 既存コードからの変更点
+# qiita.py概要
+
+- VQLS(Variational Quantum Linear Solver)の実装
+- 参考資料のコードをQiskitの最新バージョンに対応させたもの
+
+## 制約条件
+
+簡易化のため、以下の制約を設けている
+
+- 3量子bit系
+- 求める式: $$Ax = b$$
+  - A: I, Zで分解可能なもの
+  - b: H|0> = |+++>
+- 初期パラメタ、$$\frac{k}{1000}$$
+- 最適化手法: COBYLA
+
+## 既存コードからの変更点
 
 - aer, assembleがdeprecatedになったため、qiskit_aerとAerSimulator.runへ変更
+
+## メモ
+
+`gate_type`はアダマールテストで分解されるした$$<\psi|\psi>$$のI,Zに対応してる(らしい)。
+
+> The reason why we are applying two different "gate_types" is because this represents the pairs of gates shown in the expanded form of $$<\psi|\psi>$$.
+> It is also important to note that for the purposes of this implementation (the systems of equations we will actually be solving, we are only concerned with the gates I and Z, so I only include support for these gates (The code includes number "identifiers" that signify the application of different gates, 0 for I and 1 for Z).
 
 # タスク
 
