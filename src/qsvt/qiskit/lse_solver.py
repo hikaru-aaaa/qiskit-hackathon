@@ -55,10 +55,6 @@ class LSESolver:
         #    qsvt_circuit: ユニタリ全体）
         unitary, qsvt_circuit, encoding_wires, _ = self.inverse_matrix_solver.compute_matrix_inverse_qsvt()
 
-        # デバッグようにユニタリとbの積を表示
-        anc_b = [b_normalized[0], b_normalized[1], 0.0, 0.0]  # ancilla qubit分拡張
-        print(f"Unitary @ b_normalized: {unitary @ anc_b}")
-
         # TODO: 固定値にしているので、変更する。
         sys_wires = [1]
         # anc_wires = meta.get("ancilla_wires", [1])  # 必要なら
