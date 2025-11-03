@@ -4,6 +4,8 @@ from qiskit import QuantumCircuit
 from qiskit_aer import Aer
 
 SHOTS = 8192
+# NOTE: ノイズなし → statevector_simulator。ノイズ付き → qasm_simulatorにしてnoise_modelを指定。
+SIMULATOR = 'statevector_simulator'
 
 
 class LSESolver:
@@ -35,28 +37,6 @@ class LSESolver:
             'solution': x_solution,
             'residual_norm': residual_norm
         }
-
-    # def solve_lse_qsvt(self):
-    #     """
-    #     QSVTを使って連立一次方程式 Ax = b を解く
-    #     """
-    #     A = np.asarray(self.A, dtype=complex)
-    #     b = np.asarray(self.b, dtype=complex)
-
-    #     A_inv_qsvt, _, _ = self.inverse_matrix_solver.compute_matrix_inverse_qsvt()
-
-    #     x_solution = A_inv_qsvt @ b
-    #     residual_norm = np.linalg.norm(A @ x_solution - b)
-
-    #     classical_solution = np.linalg.inv(A) @ b
-    #     solution_error = np.linalg.norm(x_solution - classical_solution)
-    #     relative_error = solution_error / np.linalg.norm(classical_solution)
-
-    #     return {
-    #         'solution': x_solution,
-    #         'residual_norm': residual_norm,
-    #         'relative_error': relative_error
-    #     }
 
     def solve_linear_system_quantum(self):
         """
@@ -97,9 +77,8 @@ class LSESolver:
         combined_circuit.measure_all()
 
         # Step 6: 実行と後処理
-        backend = Aer.get_backend('qasm_simulator')
-        shots = SHOTS
-        result = backend.run(combined_circuit, shots=shots).result()
+        backend = Aer.get_backend(SIMULATOR)
+        result = backend.run(combined_circuit, shots=SHOTS).result()
         counts = result.get_counts()
         print("Measurement results:")
         print(counts)
