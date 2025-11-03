@@ -1,6 +1,9 @@
 # Claude Code
 .claude/
 refactor/
+docs/
+
+.pdf
 
 # Python
 __pycache__/
