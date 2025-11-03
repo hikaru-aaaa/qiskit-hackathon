@@ -54,7 +54,7 @@ def evaluate_poly(x, coeffs, exps):
     return result
 
 
-def verify_plot(coeffs, exps, delta=0.2, upper_limit=1.5, n=2000):
+def verify_plot(coeffs, exps, delta, upper_limit=1.5, n=2000):
     """
     近似結果をプロットして検証
     """
