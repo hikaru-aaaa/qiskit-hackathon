@@ -379,7 +379,7 @@ def extract_solution_state(
     circ.save_statevector()
 
     # Simulate to get statevector
-    simulator = AerSimulator(method='statevector')
+    simulator = AerSimulator()
     transpiled = transpile(circ, simulator)
     job = simulator.run(transpiled)
     result = job.result()
@@ -432,7 +432,7 @@ def solve_dfvqls_8x8(
     optimizer: str = 'COBYLA',
     max_iter: int = 200,
     num_ansatz_layers: int = 3,
-    shots: int = 8192,
+    shots: int = None,
     random_seed: Union[int, None] = None,
     verbose: bool = True
 ) -> Tuple[np.ndarray, OptimizeResult]:
@@ -466,7 +466,7 @@ def solve_dfvqls_8x8(
         np.random.seed(random_seed)
 
     # Create simulator once and reuse
-    simulator = AerSimulator(method='statevector')
+    simulator = AerSimulator()
 
     # Initialize random parameters
     # 3 qubits × num_layers parameters
@@ -475,7 +475,7 @@ def solve_dfvqls_8x8(
 
     if verbose:
         print("=" * 70)
-        print("DF-VQLS for 8×8 System (Statevector Mode - Exact)")
+        print("DF-VQLS for 8×8 System (mode = automatic)")
         print("=" * 70)
         print(f"Matrix size: 8×8")
         print(f"Optimizer: {optimizer}")
@@ -558,7 +558,7 @@ def test_dfvqls_example():
         optimizer='COBYLA',
         max_iter=200,
         num_ansatz_layers=3,
-        shots=8192,
+        shots=None,
         random_seed=42,
         verbose=True
     )
