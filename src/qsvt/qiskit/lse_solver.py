@@ -5,7 +5,7 @@ from qiskit_aer import Aer
 
 SHOTS = 8192
 # NOTE: ノイズなし → statevector_simulator。ノイズ付き → qasm_simulatorにしてnoise_modelを指定。
-SIMULATOR = 'statevector_simulator'
+SIMULATOR = "statevector_simulator"
 
 
 class LSESolver:
@@ -18,8 +18,10 @@ class LSESolver:
         self.A = np.asarray(A, dtype=complex)
         self.b = np.asarray(b, dtype=complex)
         self.n, self.m = self.A.shape
-        self.qubits = self.n+2
-        self.inverse_matrix_solver = InverseMatrix(self.A, poly_degree=poly_degree, kappa=kappa)
+        self.qubits = self.n + 2
+        self.inverse_matrix_solver = InverseMatrix(
+            self.A, poly_degree=poly_degree, kappa=kappa
+        )
 
     def solve_lse_classical(self):
         """
@@ -33,10 +35,7 @@ class LSESolver:
 
         residual_norm = np.linalg.norm(A @ x_solution - b)
 
-        return {
-            'solution': x_solution,
-            'residual_norm': residual_norm
-        }
+        return {"solution": x_solution, "residual_norm": residual_norm}
 
     def solve_linear_system_quantum(self):
         """
@@ -53,7 +52,9 @@ class LSESolver:
 
         # 2) QSVT回路を取得（戻り値は適宜合わせて）
         #    qsvt_circuit: ユニタリ全体）
-        unitary, qsvt_circuit, encoding_wires, _ = self.inverse_matrix_solver.compute_matrix_inverse_qsvt()
+        unitary, qsvt_circuit, encoding_wires, _ = (
+            self.inverse_matrix_solver.compute_matrix_inverse_qsvt()
+        )
 
         # TODO: 固定値にしているので、変更する。
         sys_wires = [1]
@@ -85,9 +86,9 @@ class LSESolver:
         x_solution = self._reconstruct_from_counts(counts)
 
         s = self.inverse_matrix_solver.s
-        max_singular_value = self.inverse_matrix_solver.max_singular_value
+        max_singular_value = self.inverse_matrix_solver.frobenius_norm
         # スケールを調整
-        x_solution = x_solution*b_norm / (s*max_singular_value)
+        x_solution = x_solution * b_norm / (s * max_singular_value)
 
         return x_solution
 
@@ -98,7 +99,7 @@ class LSESolver:
         """
         # anc=0のカウントだけ抜く
         # NOTE: Qiskitの仕様上最初のビットが最右に記載される。
-        post_counts = {bits: c for bits, c in counts.items() if bits[-1] == '0'}
+        post_counts = {bits: c for bits, c in counts.items() if bits[-1] == "0"}
         total_post = sum(post_counts.values())
 
         if total_post == 0:
@@ -121,9 +122,9 @@ class LSESolver:
         """
         古典解とQSVT解を比較
         """
-        print("="*40)
+        print("=" * 40)
         print("LINEAR SYSTEM SOLUTION COMPARISON")
-        print("="*40)
+        print("=" * 40)
 
         print(f"Classical: {np.round(classical_result['solution'], 4)}")
         print(f"QSVT:      {np.round(qsvt_result, 4)}")
@@ -148,7 +149,9 @@ class LSESolver:
         print(f"Test matrix A:\n{np.round(A.real, 4)}")
 
         # QSVT逆行列の計算
-        qsvt_inv, qsvt_circuit, encoding_wires, poly_coeffs = self.inverse_matrix_solver.compute_matrix_inverse_qsvt()
+        qsvt_inv, qsvt_circuit, encoding_wires, poly_coeffs = (
+            self.inverse_matrix_solver.compute_matrix_inverse_qsvt()
+        )
 
         print(f"\nQSVT Inverse Matrix:\n{np.round(qsvt_inv.real, 4)}")
 

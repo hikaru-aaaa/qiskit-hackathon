@@ -1,7 +1,7 @@
 import numpy as np
-from qsvt_qiskit_pennylane import qsvt
 from poly_approximation import fit_invx_poly
 from qiskit_aer import Aer
+from qsvt_qiskit_pennylane import qsvt
 
 
 class InverseMatrix:
@@ -9,7 +9,7 @@ class InverseMatrix:
         self.A = np.asarray(A, dtype=complex)
         self.poly_degree = poly_degree
         self.kappa = kappa
-        self.max_singular_value = None
+        self.frobenius_norm = None
         self.s = None
         self.poly_coeffs, self.s = self._build_inv_poly_coeffs()
 
@@ -43,9 +43,9 @@ class InverseMatrix:
         A_array = np.asarray(self.A, dtype=complex)
 
         # 行列の正規化
-        singular_values = np.linalg.svd(A_array, compute_uv=False)
-        self.max_singular_value = np.max(singular_values)
-        A_normalized = A_array / self.max_singular_value
+        # 最大特異値をフロベニウスノルムで抑える
+        self.frobenius_norm = np.linalg.norm(A_array, ord="fro")
+        A_normalized = A_array / self.frobenius_norm
 
         # 多項式係数を生成
         normalized_poly_coeffs, self.s = self._build_inv_poly_coeffs()
@@ -62,7 +62,9 @@ class InverseMatrix:
         # statevector_obj = result.get_statevector()
         # statevector = np.asarray(statevector_obj)
 
-        scaled_inverse_matrix, full_unitary = self.confirm_inverse_matrix_in_unitary(qsvt_circuit)
+        scaled_inverse_matrix, full_unitary = self.confirm_inverse_matrix_in_unitary(
+            qsvt_circuit
+        )
         print(f"scaled_inverse_matrix:\n{np.round(scaled_inverse_matrix, 4)}")
         print(f"full_unitary:\n{np.round(full_unitary, 4)}")
 
@@ -75,11 +77,11 @@ class InverseMatrix:
         """
         QSVT回路のユニタリ行列に逆行列が部分行列として存在することを確認
         """
-        unitary_backend = Aer.get_backend('unitary_simulator')
+        unitary_backend = Aer.get_backend("unitary_simulator")
         unitary_job = unitary_backend.run(qsvt_circuit)
         unitary_result = unitary_job.result()
         full_unitary = unitary_result.get_unitary(qsvt_circuit)
 
         n, m = self.A.shape
-        P_A = full_unitary[:n, :m] / self.s / self.max_singular_value
+        P_A = full_unitary[:n, :m] / self.s / self.frobenius_norm
         return P_A, full_unitary
