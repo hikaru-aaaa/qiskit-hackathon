@@ -15,7 +15,8 @@ sys.path.insert(0, str(project_root))
 from src.vqls.generalized.test_generalized import (
     test_8x8,
     test_16x16,
-    test_8x8_quick
+    test_8x8_quick,
+    test_parallel_performance
 )
 
 if __name__ == "__main__":
@@ -27,9 +28,11 @@ if __name__ == "__main__":
             test_16x16()
         elif test_name == "quick":
             test_8x8_quick()
+        elif test_name == "parallel":
+            test_parallel_performance()
         else:
             print(f"Unknown test: {test_name}")
-            print("Available tests: 8x8, 16x16, quick")
+            print("Available tests: 8x8, 16x16, quick, parallel")
     else:
         # Run quick test by default
         print("Running quick test (8×8 system, 50 iterations)...")

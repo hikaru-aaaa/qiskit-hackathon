@@ -5,6 +5,7 @@ Tests 8×8 and 16×16 systems.
 """
 
 import numpy as np
+import time
 from .solver import DFVQLSSolver
 
 
@@ -179,6 +180,98 @@ def test_8x8_quick():
     print("=" * 70)
 
 
+def test_parallel_performance():
+    """Compare performance between sequential and parallel execution."""
+    print("\n" + "=" * 70)
+    print("Performance Comparison: Sequential vs Parallel Execution")
+    print("=" * 70)
+    
+    # Create test data
+    K = create_tridiagonal_matrix(8, diag=2.0, off_diag=-1.0)
+    f = np.array([1, 0, 0, 1, 0, 0, 0, 0], dtype=float)
+    
+    # Test parameters
+    max_iter = 5  # Small number for quick comparison
+    num_layers = 2
+    
+    print(f"\nTest configuration:")
+    print(f"  Matrix size: 8×8")
+    print(f"  Iterations: {max_iter}")
+    print(f"  Ansatz layers: {num_layers}")
+    print()
+    
+    # Sequential execution
+    print("-" * 70)
+    print("Sequential Execution (use_parallel=False)")
+    print("-" * 70)
+    solver_seq = DFVQLSSolver(
+        matrix_size=8,
+        num_layers=num_layers,
+        optimizer_method='COBYLA',
+        max_iter=max_iter,
+        random_seed=42,
+        verbose=False,  # Reduce output for cleaner comparison
+        use_parallel=False
+    )
+    
+    start_seq = time.time()
+    u_seq, result_seq = solver_seq.solve(K, f)
+    time_seq = time.time() - start_seq
+    
+    print(f"Time: {time_seq:.2f} seconds")
+    print(f"Final cost: {result_seq.fun:.6f}")
+    print(f"Iterations: {result_seq.nfev}")
+    
+    # Parallel execution
+    print("\n" + "-" * 70)
+    print("Parallel Execution (use_parallel=True)")
+    print("-" * 70)
+    solver_par = DFVQLSSolver(
+        matrix_size=8,
+        num_layers=num_layers,
+        optimizer_method='COBYLA',
+        max_iter=max_iter,
+        random_seed=42,
+        verbose=False,  # Reduce output for cleaner comparison
+        use_parallel=True
+    )
+    
+    start_par = time.time()
+    u_par, result_par = solver_par.solve(K, f)
+    time_par = time.time() - start_par
+    
+    print(f"Time: {time_par:.2f} seconds")
+    print(f"Final cost: {result_par.fun:.6f}")
+    print(f"Iterations: {result_par.nfev}")
+    
+    # Compare results
+    print("\n" + "=" * 70)
+    print("Performance Summary")
+    print("=" * 70)
+    print(f"Sequential time: {time_seq:.2f} seconds")
+    print(f"Parallel time:   {time_par:.2f} seconds")
+    
+    if time_par < time_seq:
+        speedup = time_seq / time_par
+        improvement = (1 - time_par / time_seq) * 100
+        print(f"✓ Speedup: {speedup:.2f}x ({improvement:.1f}% faster)")
+    else:
+        slowdown = time_par / time_seq
+        overhead = (time_par / time_seq - 1) * 100
+        print(f"⚠ Slowdown: {slowdown:.2f}x ({overhead:.1f}% slower)")
+        print("  (Parallel overhead may be due to GIL or initialization cost)")
+    
+    # Verify solutions are similar
+    error_diff = np.linalg.norm(u_seq - u_par) / np.linalg.norm(u_seq)
+    print(f"\nSolution difference: {error_diff:.2e}")
+    if error_diff < 1e-6:
+        print("✓ Solutions match (within numerical precision)")
+    else:
+        print("⚠ Solutions differ (may be due to different random seeds or optimization path)")
+    
+    print("=" * 70)
+
+
 if __name__ == "__main__":
     import sys
     
@@ -190,9 +283,11 @@ if __name__ == "__main__":
             test_16x16()
         elif test_name == "quick":
             test_8x8_quick()
+        elif test_name == "parallel":
+            test_parallel_performance()
         else:
             print(f"Unknown test: {test_name}")
-            print("Available tests: 8x8, 16x16, quick")
+            print("Available tests: 8x8, 16x16, quick, parallel")
     else:
         # Run quick test by default
         test_8x8_quick()

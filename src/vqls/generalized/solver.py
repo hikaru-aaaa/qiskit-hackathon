@@ -40,7 +40,8 @@ class DFVQLSSolver:
         optimizer_method: str = 'COBYLA',
         max_iter: int = 200,
         random_seed: Optional[int] = None,
-        verbose: bool = True
+        verbose: bool = True,
+        use_parallel: bool = False  # Enable parallel execution for numerator/denominator circuits
     ):
         """
         Initialize DF-VQLS solver.
@@ -52,6 +53,7 @@ class DFVQLSSolver:
             max_iter: Maximum number of optimization iterations
             random_seed: Random seed for reproducibility
             verbose: Whether to print progress information
+            use_parallel: Whether to run numerator and denominator circuits in parallel
         
         Raises:
             ValueError: If matrix_size is not a power of 2
@@ -63,6 +65,7 @@ class DFVQLSSolver:
         self.n_qubits = calculate_qubits(matrix_size)
         self.num_layers = num_layers
         self.verbose = verbose
+        self.use_parallel = use_parallel
         
         # Initialize components
         self.ansatz = HardwareEfficientAnsatz(
@@ -137,6 +140,7 @@ class DFVQLSSolver:
             print(f"Ansatz layers: {self.num_layers}")
             print(f"Max iterations: {self.optimizer.max_iter}")
             print(f"Optimizer: {self.optimizer.method}")
+            print(f"Parallel execution: {'Enabled' if self.use_parallel else 'Disabled'}")
             print("=" * 70 + "\n")
         
         # Initialize random parameters
@@ -145,7 +149,11 @@ class DFVQLSSolver:
         
         # Create cost function wrapper
         def cost_fn(params, pbar=None):
-            return self.cost_function.compute(params, K, f, pbar=pbar)
+            return self.cost_function.compute(
+                params, K, f, 
+                pbar=pbar, 
+                use_parallel=self.use_parallel
+            )
         
         # Run optimization
         result = self.optimizer.optimize(
@@ -154,10 +162,16 @@ class DFVQLSSolver:
         )
         
         if self.verbose:
+            # Show cache statistics
+            cache_stats = self.state_preparer.get_cache_stats()
             print(f"\n{'=' * 70}")
             print(f"Optimization complete: {result.nfev} iterations")
             print(f"Final cost: {result.fun:.6f}")
             print(f"Success: {result.success}")
+            print(f"\nCache Statistics:")
+            print(f"  Cache hits: {cache_stats['hits']}")
+            print(f"  Cache misses: {cache_stats['misses']}")
+            print(f"  Hit rate: {cache_stats['hit_rate']:.2%}")
             print("=" * 70)
         
         # Extract solution

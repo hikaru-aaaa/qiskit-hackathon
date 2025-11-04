@@ -8,6 +8,7 @@ import numpy as np
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
 from .circuit_builder import CircuitBuilder
 from .state_preparer import StatePreparer
@@ -68,6 +69,10 @@ class CostFunction:
         self.verbose = verbose
         
         self.n_qubits = circuit_builder.n_qubits
+        
+        # Pre-created simulators for parallel execution (lazy initialization)
+        self._parallel_simulators = None
+        self._parallel_executor = None
     
     def _compute_u_theta(self, params: np.ndarray) -> np.ndarray:
         """
@@ -92,12 +97,75 @@ class CostFunction:
         
         return u_theta
     
+    def _initialize_parallel_resources(self, num_workers: int = 2):
+        """Initialize parallel execution resources (simulators and executor).
+        
+        This pre-creates simulator instances to avoid initialization overhead
+        during parallel execution.
+        """
+        if self._parallel_simulators is None:
+            from qiskit_aer import AerSimulator
+            # Pre-create simulator instances for each worker
+            self._parallel_simulators = [
+                AerSimulator(method='statevector') 
+                for _ in range(num_workers)
+            ]
+            # Create thread pool executor (reuse it)
+            self._parallel_executor = ThreadPoolExecutor(max_workers=num_workers)
+    
+    def _run_circuit_parallel(self, circuits: list) -> list:
+        """Run multiple circuits in parallel.
+        
+        Uses pre-initialized simulator instances to minimize overhead.
+        Each thread gets its own simulator instance since AerSimulator is not thread-safe.
+        
+        Note: Assumes _initialize_parallel_resources() has already been called.
+        
+        Args:
+            circuits: List of circuits to run in parallel
+        """
+        num_workers = len(circuits)
+        
+        # Ensure parallel resources are initialized
+        if self._parallel_simulators is None or len(self._parallel_simulators) < num_workers:
+            self._initialize_parallel_resources(num_workers)
+        
+        def run_single_with_simulator(circ_and_sim):
+            """Run circuit with pre-created simulator."""
+            circ, sim = circ_and_sim
+            transpiled = transpile(circ, sim)
+            result = sim.run(transpiled).result()
+            return np.asarray(result.get_statevector(circ))
+        
+        # Pair each circuit with a pre-created simulator
+        circuits_with_sims = list(zip(circuits, self._parallel_simulators[:num_workers]))
+        
+        # Execute in parallel using pre-created executor
+        from concurrent.futures import as_completed
+        
+        # Use submit to get futures
+        futures = [
+            self._parallel_executor.submit(run_single_with_simulator, circ_and_sim)
+            for circ_and_sim in circuits_with_sims
+        ]
+        
+        # Wait for all futures to complete
+        for future in as_completed(futures):
+            pass  # Just wait for completion
+        
+        # Get results in original order (preserve circuit order)
+        ordered_results = [future.result() for future in futures]
+        
+        return ordered_results
+    
     def compute(
         self,
         params: np.ndarray,
         K: np.ndarray,
         f: np.ndarray,
-        pbar: Optional[object] = None
+        pbar: Optional[object] = None,
+        use_parallel: bool = False,  # Disable by default - enable when needed
+        phase_pbar: Optional[object] = None  # Progress bar for internal phases
     ) -> float:
         """
         Compute the global cost function CG(θ).
@@ -107,54 +175,95 @@ class CostFunction:
             K: Coefficient matrix
             f: Right-hand side vector
             pbar: Optional tqdm progress bar for updating
+            use_parallel: Whether to run numerator and denominator circuits in parallel
+            phase_pbar: Optional progress bar for internal phases
         
         Returns:
             Cost function value (0 means perfect solution)
         """
-        # Prepare states
+        from tqdm import tqdm
+        
+        # Create phase progress bar if not provided and verbose mode
+        if phase_pbar is None and self.verbose:
+            phase_pbar = tqdm(total=6, desc="Cost computation", leave=False, 
+                             bar_format='{desc}: {percentage:3.0f}%|{bar}| {elapsed}')
+        
+        # Phase 1: Prepare states (cached - only computed once if K and f don't change)
+        if phase_pbar:
+            phase_pbar.set_description("Phase 1/6: Preparing states")
         vec_K, norm_K = self.state_preparer.prepare_matrix(K)
         vec_KT, _ = self.state_preparer.prepare_matrix_transpose(K)
         f_norm = self.state_preparer.prepare_vector(f)
+        if phase_pbar:
+            phase_pbar.update(1)
         
-        # Compute |u(θ)⟩
+        # Phase 2: Compute |u(θ)⟩
+        if phase_pbar:
+            phase_pbar.set_description("Phase 2/6: Computing |u(θ)⟩")
         u_theta = self._compute_u_theta(params)
+        if phase_pbar:
+            phase_pbar.update(1)
         
-        # ===== Compute Numerator: |⟨f|K|u(θ)⟩|² =====
+        # Phase 3: Build circuits
+        if phase_pbar:
+            phase_pbar.set_description("Phase 3/6: Building circuits")
         circ_num = self.circuit_builder.build_numerator_circuit(
             vec_K, f_norm, u_theta
         )
         circ_num.save_statevector()
         
-        # Run numerator circuit
-        transpiled_num = transpile(circ_num, self.simulator)
-        result_num = self.simulator.run(transpiled_num).result()
-        sv_num = np.asarray(result_num.get_statevector(circ_num))
-        
-        # Extract P(0) from statevector
-        P0_num = extract_P0_from_statevector(sv_num)
-        
-        # Calculate inner product squared: |⟨ψ₁|ψ₂⟩|² = 2P(0) - 1
-        inner_product_squared_num = abs(2 * P0_num - 1)
-        
-        # Numerator needs |⟨vec(K)|u,f⟩|² (squared overlap)
-        numerator = (norm_K ** 2) * inner_product_squared_num
-        
-        # ===== Compute Denominator: ⟨u(θ)|K^T K|u(θ)⟩ =====
         circ_den = self.circuit_builder.build_denominator_circuit(
             vec_K, vec_KT, u_theta
         )
         circ_den.save_statevector()
+        if phase_pbar:
+            phase_pbar.update(1)
         
-        # Run denominator circuit
-        transpiled_den = transpile(circ_den, self.simulator)
-        result_den = self.simulator.run(transpiled_den).result()
-        sv_den = np.asarray(result_den.get_statevector(circ_den))
+        # Phase 4: Run circuits (parallel or sequential)
+        if phase_pbar:
+            phase_pbar.set_description("Phase 4/6: Running circuits")
+        if use_parallel:
+            # Initialize parallel resources if needed (first time only)
+            if self._parallel_simulators is None:
+                self._initialize_parallel_resources(num_workers=2)
+            # Run numerator and denominator circuits in parallel
+            sv_num, sv_den = self._run_circuit_parallel([circ_num, circ_den])
+            if phase_pbar:
+                phase_pbar.update(2)  # Skip phase 5 (both circuits done in parallel)
+        else:
+            # Phase 4: Run numerator circuit (sequential)
+            if phase_pbar:
+                phase_pbar.set_description("Phase 4/6: Running numerator circuit")
+            # Sequential execution
+            transpiled_num = transpile(circ_num, self.simulator)
+            result_num = self.simulator.run(transpiled_num).result()
+            sv_num = np.asarray(result_num.get_statevector(circ_num))
+            if phase_pbar:
+                phase_pbar.update(1)
+            
+            # Phase 5: Run denominator circuit
+            if phase_pbar:
+                phase_pbar.set_description("Phase 5/6: Running denominator circuit")
+            transpiled_den = transpile(circ_den, self.simulator)
+            result_den = self.simulator.run(transpiled_den).result()
+            sv_den = np.asarray(result_den.get_statevector(circ_den))
+            if phase_pbar:
+                phase_pbar.update(1)
         
-        # Extract P(0) from statevector
+        # Phase 6: Compute cost
+        if phase_pbar:
+            phase_pbar.set_description("Phase 6/6: Computing cost")
+        
+        # Extract P(0) from statevectors
+        P0_num = extract_P0_from_statevector(sv_num)
         P0_den = extract_P0_from_statevector(sv_den)
         
-        # Calculate inner product squared
+        # Calculate inner product squared: |⟨ψ₁|ψ₂⟩|² = 2P(0) - 1
+        inner_product_squared_num = abs(2 * P0_num - 1)
         inner_product_squared_den = abs(2 * P0_den - 1)
+        
+        # Numerator needs |⟨vec(K)|u,f⟩|² (squared overlap)
+        numerator = (norm_K ** 2) * inner_product_squared_num
         
         # Denominator needs ⟨u|K^T K|u⟩ = ⟨u⊗vec(K^T)|vec(K)⊗u⟩ (inner product, NOT squared!)
         # Swap test gives |⟨ψ₁|ψ₂⟩|², so take sqrt to get the inner product value
@@ -165,6 +274,10 @@ class CostFunction:
         # Add small epsilon to avoid division by zero
         epsilon = 1e-10
         cost = 1.0 - (numerator / (denominator + epsilon))
+        
+        if phase_pbar:
+            phase_pbar.update(1)
+            phase_pbar.close()
         
         # Update progress bar if provided
         if pbar is not None:

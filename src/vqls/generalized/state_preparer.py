@@ -26,10 +26,18 @@ class StatePreparer:
         self._vec_KT_cache = None
         self._f_norm_cache = None
         self._norm_K_cache = None
+        self._K_hash = None
+        self._f_hash = None
+        
+        # Statistics for cache hits/misses
+        self._cache_hits = 0
+        self._cache_misses = 0
     
     def prepare_matrix(self, K: np.ndarray) -> Tuple[np.ndarray, float]:
         """
         Prepare vectorized matrix |vec(K)⟩.
+        
+        Uses caching to avoid recomputation when K hasn't changed.
         
         Args:
             K: Input matrix (N×N)
@@ -37,28 +45,51 @@ class StatePreparer:
         Returns:
             Tuple of (normalized_vector, frobenius_norm)
         """
+        # Check if K has changed using hash
+        K_hash = hash(K.tobytes())
+        if self._K_hash == K_hash and self._vec_K_cache is not None:
+            self._cache_hits += 1
+            return self._vec_K_cache, self._norm_K_cache
+        
+        # Compute and cache
+        self._cache_misses += 1
         vec_K, norm_K = vectorize_matrix(K)
         self._vec_K_cache = vec_K
         self._norm_K_cache = norm_K
+        self._K_hash = K_hash
         return vec_K, norm_K
     
     def prepare_matrix_transpose(self, K: np.ndarray) -> Tuple[np.ndarray, float]:
         """
         Prepare vectorized transpose |vec(K^T)⟩.
         
+        Uses caching to avoid recomputation when K hasn't changed.
+        
         Args:
             K: Input matrix (N×N)
         
         Returns:
             Tuple of (normalized_vector, frobenius_norm)
         """
+        # Check if K has changed using hash
+        K_hash = hash(K.tobytes())
+        if self._K_hash == K_hash and self._vec_KT_cache is not None:
+            # norm_KT is same as norm_K
+            self._cache_hits += 1
+            return self._vec_KT_cache, self._norm_K_cache
+        
+        # Compute and cache
+        self._cache_misses += 1
         vec_KT, norm_KT = vectorize_matrix(K.T)
         self._vec_KT_cache = vec_KT
+        self._K_hash = K_hash
         return vec_KT, norm_KT
     
     def prepare_vector(self, f: np.ndarray) -> np.ndarray:
         """
         Prepare normalized right-hand side vector |f⟩.
+        
+        Uses caching to avoid recomputation when f hasn't changed.
         
         Args:
             f: Right-hand side vector
@@ -66,8 +97,17 @@ class StatePreparer:
         Returns:
             Normalized vector
         """
+        # Check if f has changed using hash
+        f_hash = hash(f.tobytes())
+        if self._f_hash == f_hash and self._f_norm_cache is not None:
+            self._cache_hits += 1
+            return self._f_norm_cache
+        
+        # Compute and cache
+        self._cache_misses += 1
         f_norm = normalize_vector(f)
         self._f_norm_cache = f_norm
+        self._f_hash = f_hash
         return f_norm
     
     def get_cached_vec_K(self) -> np.ndarray:
@@ -100,4 +140,20 @@ class StatePreparer:
         self._vec_KT_cache = None
         self._f_norm_cache = None
         self._norm_K_cache = None
+        self._K_hash = None
+        self._f_hash = None
+        self._cache_hits = 0
+        self._cache_misses = 0
+    
+    def get_cache_stats(self) -> dict:
+        """Get cache statistics."""
+        total = self._cache_hits + self._cache_misses
+        if total == 0:
+            return {'hits': 0, 'misses': 0, 'hit_rate': 0.0}
+        hit_rate = self._cache_hits / total
+        return {
+            'hits': self._cache_hits,
+            'misses': self._cache_misses,
+            'hit_rate': hit_rate
+        }
 
