@@ -16,7 +16,8 @@ from src.vqls.generalized.test_generalized import (
     test_8x8,
     test_16x16,
     test_8x8_quick,
-    test_parallel_performance
+    test_parallel_performance,
+    test_original_vqls_problem
 )
 
 if __name__ == "__main__":
@@ -30,9 +31,11 @@ if __name__ == "__main__":
             test_8x8_quick()
         elif test_name == "parallel":
             test_parallel_performance()
+        elif test_name == "original":
+            test_original_vqls_problem()
         else:
             print(f"Unknown test: {test_name}")
-            print("Available tests: 8x8, 16x16, quick, parallel")
+            print("Available tests: 8x8, 16x16, quick, parallel, original")
     else:
         # Run quick test by default
         print("Running quick test (8×8 system, 50 iterations)...")
