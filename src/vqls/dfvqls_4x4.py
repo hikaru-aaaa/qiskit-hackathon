@@ -2,12 +2,13 @@
 DF-VQLS implementation for 4×4 systems (faster for testing)
 """
 
-from typing import Tuple, Union
+from typing import Tuple, Union, Optional
 import numpy as np
 import random
 from scipy.optimize import minimize, OptimizeResult
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
+from tqdm import tqdm
 
 
 def vectorize_matrix(K: np.ndarray) -> Tuple[np.ndarray, float]:
@@ -88,7 +89,7 @@ def build_CG_denominator_4x4(params, vec_K, vec_KT, num_layers=2):
     return circ
 
 
-def compute_CG_cost_4x4(params, K, f, simulator, shots=None, num_layers=2, verbose=True):
+def compute_CG_cost_4x4(params, K, f, simulator, shots=None, num_layers=2, verbose=True, pbar=None):
     """Compute CG cost for 4×4 system using statevector (exact)"""
     vec_K, norm_K = vectorize_matrix(K)
     vec_KT, _ = vectorize_matrix(K.T)
@@ -163,7 +164,11 @@ def compute_CG_cost_4x4(params, K, f, simulator, shots=None, num_layers=2, verbo
 
     cost = 1.0 - (numerator / (denominator + 1e-10))
 
-    if verbose:
+    if pbar is not None:
+        pbar.update(1)
+        pbar.set_postfix({'cost': f'{cost:.6f}'})
+
+    if verbose and pbar is None:
         print(f"Cost: {cost:.6f} | Num: {numerator:.6f} | Den: {denominator:.6f} | P0_num: {P0_num:.4f} | P0_den: {P0_den:.4f}")
 
     return cost
@@ -207,12 +212,21 @@ def solve_dfvqls_4x4(K, f, max_iter=100, num_layers=2, seed=42, verbose=True):
         print(f"Max iterations: {max_iter}, Layers: {num_layers}")
         print("="*70 + "\n")
 
+    # tqdmのプログレスバーを設定
+    pbar = tqdm(total=max_iter, desc="Optimizing", unit="iter", disable=not verbose)
+    
+    # コスト関数をラップしてプログレスバーを更新
+    def cost_function(p):
+        return compute_CG_cost_4x4(p, K, f, simulator, None, num_layers, verbose=False, pbar=pbar)
+
     result = minimize(
-        fun=lambda p: compute_CG_cost_4x4(p, K, f, simulator, None, num_layers, verbose),
+        fun=cost_function,
         x0=initial_params,
         method='COBYLA',
         options={'maxiter': max_iter}
     )
+    
+    pbar.close()
 
     if verbose:
         print(f"\n{'='*70}")
