@@ -264,7 +264,7 @@ class LSESolver:
         amp_sys = np.zeros(len(post_amplitudes))
         for bits, c in post_amplitudes.items():
             sys_bit = bits[1:]  # 右側がsystem
-            amp_sys[int(sys_bit)] = c
+            amp_sys[int(sys_bit, 2)] = c
 
         print("amp_sys:", amp_sys)
 
@@ -287,20 +287,20 @@ class LSESolver:
 
 if __name__ == "__main__":
     statevector = False
-    A = np.array([3, 1, 1, 3]).reshape((2, 2))
-    b = np.array([1, 2], dtype="complex")
+    # A = np.array([3, 1, 1, 3]).reshape((2, 2))
+    # b = np.array([1, 2], dtype="complex")
 
     # NOTE: より大きな行列のテスト用に残しておく。
-    # A = np.array(
-    #     [
-    #         [0.65713691, -0.05349524, 0.08024556, -0.07242864],
-    #         [-0.05349524, 0.65713691, -0.07242864, 0.08024556],
-    #         [0.08024556, -0.07242864, 0.65713691, -0.05349524],
-    #         [-0.07242864, 0.08024556, -0.05349524, 0.65713691],
-    #     ]
-    # )
+    A = np.array(
+        [
+            [0.65713691, -0.05349524, 0.08024556, -0.07242864],
+            [-0.05349524, 0.65713691, -0.07242864, 0.08024556],
+            [0.08024556, -0.07242864, 0.65713691, -0.05349524],
+            [-0.07242864, 0.08024556, -0.05349524, 0.65713691],
+        ]
+    )
 
-    # b = np.array([1, 2, 3, 4], dtype="complex")
+    b = np.array([1, 2, 3, 4], dtype="complex")
 
     print(f"A:\n{np.round(A, 4)}")
     print(f"b:\n{np.round(b, 4)}")
