@@ -1898,6 +1898,17 @@ wheels = [
 ]
 
 [[package]]
+name = "pyqsp"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/58/16/1ec68abe5447711b79324be38f2c71a519fa863a52a0f081f16cbe72b345/pyqsp-0.2.0.tar.gz", hash = "sha256:5b4901a88f98467a84838470a97ccba9853649a2227ad5bcb2cdefc662ec6d5e", size = 86999, upload-time = "2024-12-06T02:35:20.263Z" }
+
+[[package]]
 name = "pyspnego"
 version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2071,6 +2082,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pennylane" },
+    { name = "pyqsp" },
     { name = "qiskit", extra = ["visualization"] },
     { name = "qiskit-aer" },
     { name = "qiskit-ibm-runtime" },
@@ -2090,6 +2102,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "pennylane", specifier = ">=0.43.0" },
+    { name = "pyqsp", specifier = ">=0.2.0" },
     { name = "qiskit", extras = ["visualization"], specifier = ">=2.2.3" },
     { name = "qiskit-aer", specifier = ">=0.17.2" },
     { name = "qiskit-ibm-runtime", specifier = ">=0.43.1" },

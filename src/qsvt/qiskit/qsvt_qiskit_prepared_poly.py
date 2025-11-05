@@ -245,3 +245,53 @@ def qsvt(matrix_or_value, angles, encoding_wires, block_encoding="embedding"):
     qc.compose(qc_phase, inplace=True)
 
     return qc, phase_matrices
+
+
+def transform_angles(angles, routine1, routine2):
+    """
+    Converts angles for quantum signal processing (QSP) and quantum singular value
+    transformation (QSVT) routines.
+
+    The transformation is based on Appendix A.2 of arXiv:2105.02859.
+    Note that QSVT is equivalent to taking the reflection convention of QSP.
+
+    Args:
+        angles (array-like): angles to be transformed
+        routine1 (str): the current routine for which the angles are obtained,
+                       must be either "QSP" or "QSVT"
+        routine2 (str): the target routine for which the angles should be transformed,
+                       must be either "QSP" or "QSVT"
+
+    Returns:
+        np.ndarray: the transformed angles as a NumPy array
+    """
+    angles = np.asarray(angles)
+
+    if routine1 == routine2:
+        return angles
+
+    if routine1 == "QSP" and routine2 == "QSVT":
+        num_angles = len(angles)
+        update_vals = np.empty(num_angles)
+
+        update_vals[0] = 3 * np.pi / 4 - (3 + num_angles % 4) * np.pi / 2
+        update_vals[1:-1] = np.pi / 2
+        update_vals[-1] = -np.pi / 4
+
+        return angles + update_vals
+
+    if routine1 == "QSVT" and routine2 == "QSP":
+        num_angles = len(angles)
+        update_vals = np.empty(num_angles)
+
+        update_vals[0] = 3 * np.pi / 4 - (3 + num_angles % 4) * np.pi / 2
+        update_vals[1:-1] = np.pi / 2
+        update_vals[-1] = -np.pi / 4
+
+        return angles - update_vals
+
+    # Invalid conversion
+    raise AssertionError(
+        f"Invalid conversion. The conversion between {routine1} --> {routine2} is not defined. "
+        f"Valid routines are 'QSP' and 'QSVT'."
+    )

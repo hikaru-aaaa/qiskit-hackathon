@@ -12,7 +12,7 @@ class InverseMatrix:
         self.frobenius_norm = None
         self.s = 1.0 / self.kappa
 
-    def compute_matrix_inverse_qsvt(self):
+    def compute_matrix_inverse_qsvt(self, angles_qsvt=None):
         """
         QSVTを使って行列の逆行列を計算
 
@@ -33,8 +33,9 @@ class InverseMatrix:
         required_qubits = int(np.ceil(np.log2(n)))
         encoding_wires = list(range(required_qubits))
 
-        angles_qsvt = load_angles(self.epsilon, self.kappa)
-        print("angles_qsvt", angles_qsvt)
+        if angles_qsvt is None:
+            angles_qsvt = load_angles(self.epsilon, self.kappa)
+        # print("angles_qsvt", angles_qsvt)
         # angles_qsvt = [x for x in angles_qsvt]
 
         qsvt_circuit, phase_matrices = qsvt(A_normalized, angles_qsvt, encoding_wires)
