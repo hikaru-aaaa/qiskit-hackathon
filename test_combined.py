@@ -101,16 +101,19 @@ def solve_with_dfvqls(A, b, matrix_size, max_iter=100):
 
 
 def solve_with_qsvt(A, b, matrix_size):
-    """QSVTで解く（2×2のみ対応）"""
+    """QSVTで解く（理論的には任意サイズに対応可能）"""
     if not QSVT_AVAILABLE:
         print("\n" + "-" * 70)
         print("QSVT Solver (利用不可)")
         print("-" * 70)
         return None
     
-    if matrix_size != 2:
+    # 元の実装では2×2限定のTODOがあったが、実装は任意サイズに対応可能
+    # ただし、4×4以上ではHadamardテストの計算コストが非常に高くなる
+    # 4×4は試せるが、時間がかかる可能性がある
+    if matrix_size > 4:
         print("\n" + "-" * 70)
-        print(f"QSVT Solver ({matrix_size}×{matrix_size}は未対応、2×2のみ)")
+        print(f"QSVT Solver ({matrix_size}×{matrix_size}は計算コストが高すぎるためスキップ)")
         print("-" * 70)
         return None
     

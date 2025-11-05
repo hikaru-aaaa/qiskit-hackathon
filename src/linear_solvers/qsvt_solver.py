@@ -7,6 +7,7 @@ Quantum Singular Value Transformation (QSVT) を使用して
 
 from typing import Tuple
 import numpy as np
+import warnings
 
 from .base import LinearSystemSolver
 from ..qsvt.generalized import QSVTSolver as GeneralizedQSVTSolver
@@ -45,11 +46,27 @@ class QSVTSolver(LinearSystemSolver):
         Raises:
             NotImplementedError: matrix_sizeが2以外の場合
         """
-        if matrix_size != 2:
+        # 元のqsvtブランチでは2×2限定のTODOがあったが、実装は任意サイズに対応可能
+        # ただし、4×4以上ではHadamardテストの計算コストが非常に高くなる
+        # 4×4: 2^4 = 16回のHadamardテスト
+        # 8×8: 2^6 = 64回のHadamardテスト（非常に時間がかかる）
+        if matrix_size > 4:
             raise NotImplementedError(
-                f"QSVT solver currently supports only 2×2 matrices. "
-                f"Got matrix_size={matrix_size}. "
-                f"Generalization to larger matrices is in progress."
+                f"QSVT solver for {matrix_size}×{matrix_size} matrices is too computationally expensive. "
+                "Currently supports up to 4×4 matrices. "
+                f"For {matrix_size}×{matrix_size} matrices, the Hadamard test requires "
+                f"{2**(int(np.ceil(np.log2(matrix_size)) + 1))} tests, "
+                "which becomes prohibitively slow."
+            )
+        
+        if matrix_size > 2:
+            n_qubits = int(np.ceil(np.log2(matrix_size))) + 1
+            n_tests = 2**n_qubits
+            warnings.warn(
+                f"QSVT solver for {matrix_size}×{matrix_size} matrices is computationally expensive. "
+                f"Hadamard test will require {n_tests} tests. "
+                "This may take a very long time.",
+                RuntimeWarning
             )
         
         self.solver = GeneralizedQSVTSolver(
