@@ -1,65 +1,59 @@
 import numpy as np
 from qiskit_aer import Aer
 from qsvt_qiskit_prepared_poly import qsvt
-from param_store import load_angles
+import pyqsp
+from pyqsp.angle_sequence import QuantumSignalProcessingPhases
+from pyqsp.poly import PolyOneOverX
+from qsvt_qiskit_prepared_poly import transform_angles
 
 
-class InverseMatrix:
-    def __init__(self, A, kappa=50.0, epsilon=0.01):
-        self.A = np.asarray(A, dtype=complex)
-        self.kappa = kappa
-        self.epsilon = epsilon
-        self.frobenius_norm = None
-        self.s = 1.0 / self.kappa
+def compute_matrix_inverse_qsvt(A, angles_qsvt):
+    """
+    QSVTを使って行列の逆行列を計算
+    Aは正規化されていることを前提とする。
 
-    def compute_matrix_inverse_qsvt(self, angles_qsvt=None):
-        """
-        QSVTを使って行列の逆行列を計算
+    Returns:
+        tuple: (QSVT逆行列, QSVT回路, 多項式係数)
+    """
+    # 量子ビット数を計算
+    n, m = A.shape
+    required_qubits = int(np.ceil(np.log2(n)))
+    encoding_wires = list(range(required_qubits))
 
-        Returns:
-            tuple: (QSVT逆行列, QSVT回路, 多項式係数)
-        """
-        A_array = np.asarray(self.A, dtype=complex)
+    qsvt_circuit, phase_matrices = qsvt(A, angles_qsvt, encoding_wires)
+    full_unitary = get_full_unitary(qsvt_circuit)
 
-        # 行列の正規化
-        # 最大特異値をフロベニウスノルムで抑える
-        self.frobenius_norm = np.linalg.norm(A_array, ord="fro")
-        A_normalized = A_array / self.frobenius_norm
+    return full_unitary, qsvt_circuit, encoding_wires, phase_matrices
 
-        print("A_normalized:\n", np.round(A_normalized, 4))
 
-        # 量子ビット数を計算
-        n, m = A_array.shape
-        required_qubits = int(np.ceil(np.log2(n)))
-        encoding_wires = list(range(required_qubits))
+def get_full_unitary(qsvt_circuit):
+    unitary_backend = Aer.get_backend("unitary_simulator")
+    unitary_job = unitary_backend.run(qsvt_circuit)
+    unitary_result = unitary_job.result()
+    full_unitary = unitary_result.get_unitary(qsvt_circuit)
+    return full_unitary
 
-        if angles_qsvt is None:
-            angles_qsvt = load_angles(self.epsilon, self.kappa)
-        # print("angles_qsvt", angles_qsvt)
-        # angles_qsvt = [x for x in angles_qsvt]
 
-        qsvt_circuit, phase_matrices = qsvt(A_normalized, angles_qsvt, encoding_wires)
+def compute_classical_inverse(A):
+    return np.linalg.inv(A)
 
-        scaled_inverse_matrix, full_unitary = self.confirm_inverse_matrix_in_unitary(
-            qsvt_circuit
-        )
-        print(f"scaled_inverse_matrix:\n{np.round(scaled_inverse_matrix, 4)}")
-        print(f"full_unitary:\n{np.round(full_unitary, 4)}")
 
-        return full_unitary, qsvt_circuit, encoding_wires, phase_matrices
+def confirm_inverse_matrix_in_unitary(A, s, frobenius_norm, qsvt_circuit):
+    """
+    QSVT回路のユニタリ行列に逆行列が部分行列として存在することを確認
+    """
+    unitary_backend = Aer.get_backend("unitary_simulator")
+    unitary_job = unitary_backend.run(qsvt_circuit)
+    unitary_result = unitary_job.result()
+    full_unitary = unitary_result.get_unitary(qsvt_circuit)
 
-    def compute_classical_inverse(self):
-        return np.linalg.inv(self.A)
+    n, m = A.shape
+    P_A = full_unitary[:n, :m] / s / frobenius_norm
+    return P_A, full_unitary
 
-    def confirm_inverse_matrix_in_unitary(self, qsvt_circuit):
-        """
-        QSVT回路のユニタリ行列に逆行列が部分行列として存在することを確認
-        """
-        unitary_backend = Aer.get_backend("unitary_simulator")
-        unitary_job = unitary_backend.run(qsvt_circuit)
-        unitary_result = unitary_job.result()
-        full_unitary = unitary_result.get_unitary(qsvt_circuit)
 
-        n, m = self.A.shape
-        P_A = full_unitary[:n, :m] / self.s / self.frobenius_norm
-        return P_A, full_unitary
+def generate_angles_qsvt_and_scale(kappa: float) -> tuple[np.ndarray, float]:
+    pcoefs, s = pyqsp.poly.PolyOneOverX().generate(kappa, return_coef=True, ensure_bounded=True, return_scale=True)
+    phi_pyqsp = pyqsp.angle_sequence.QuantumSignalProcessingPhases(pcoefs, signal_operator="Wx", tolerance=0.00001)
+    phi_qsvt = transform_angles(phi_pyqsp, "QSP", "QSVT")
+    return phi_qsvt, s
