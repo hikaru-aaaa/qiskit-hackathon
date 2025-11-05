@@ -109,13 +109,8 @@ def solve_with_qsvt(A, b, matrix_size):
         return None
     
     # 元の実装では2×2限定のTODOがあったが、実装は任意サイズに対応可能
-    # ただし、4×4以上ではHadamardテストの計算コストが非常に高くなる
-    # 4×4は試せるが、時間がかかる可能性がある
-    if matrix_size > 4:
-        print("\n" + "-" * 70)
-        print(f"QSVT Solver ({matrix_size}×{matrix_size}は計算コストが高すぎるためスキップ)")
-        print("-" * 70)
-        return None
+    # サイズが大きくなるとHadamardテストの計算コストが指数的に増加するが、
+    # 高性能PCでのシミュレーションを想定し、制限は設けない
     
     print("\n" + "-" * 70)
     print("QSVT Solver (Statevector)")
