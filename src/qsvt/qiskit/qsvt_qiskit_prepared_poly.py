@@ -1,5 +1,5 @@
 """
-pennylaneで用意されているアングルを用いて、QSVTを実行する。
+QSVTを実行する。
 """
 
 import numpy as np
@@ -248,23 +248,6 @@ def qsvt(matrix_or_value, angles, encoding_wires, block_encoding="embedding"):
 
 
 def transform_angles(angles, routine1, routine2):
-    """
-    Converts angles for quantum signal processing (QSP) and quantum singular value
-    transformation (QSVT) routines.
-
-    The transformation is based on Appendix A.2 of arXiv:2105.02859.
-    Note that QSVT is equivalent to taking the reflection convention of QSP.
-
-    Args:
-        angles (array-like): angles to be transformed
-        routine1 (str): the current routine for which the angles are obtained,
-                       must be either "QSP" or "QSVT"
-        routine2 (str): the target routine for which the angles should be transformed,
-                       must be either "QSP" or "QSVT"
-
-    Returns:
-        np.ndarray: the transformed angles as a NumPy array
-    """
     angles = np.asarray(angles)
 
     if routine1 == routine2:
