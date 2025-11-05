@@ -36,7 +36,7 @@ class LSESolver:
 
         return x_solution
 
-    def solve_linear_system_quantum(self):
+    def solve_linear_system_quantum(self, statevector=False):
         """
         実際の量子デバイスでの連立一次方程式の解法
         """
@@ -93,7 +93,9 @@ class LSESolver:
         # # Step 7: 測定結果から解ベクトルを再構成
         # x_solution = self._reconstruct_from_counts(counts)
 
-        real_amplitudes = self.measure_real_amplitudes(qsvt_circuit, b_normalized)
+        real_amplitudes = self.measure_real_amplitudes(
+            qsvt_circuit, b_normalized, statevector
+        )
         print("real_amplitudes:", real_amplitudes)
 
         # スケールを調整
@@ -105,7 +107,7 @@ class LSESolver:
 
         return x_solution
 
-    def measure_real_amplitudes(self, qsvt_circuit, b_normalized):
+    def measure_real_amplitudes(self, qsvt_circuit, b_normalized, statevector=False):
         """
         Hadamardテスト（Overlap Test）を用いて全基底状態の確率振幅の実部を測定
 
@@ -124,7 +126,6 @@ class LSESolver:
         n_total_states = 2**n_qubits
 
         real_amplitudes = {}
-        real_amplitudes_statevector = {}
 
         print("=" * 60)
         print("Hadamardテストによる全基底状態の実部測定")
@@ -189,46 +190,47 @@ class LSESolver:
             # Step 3: 補助qubitに再度Hadamardゲート
             test_circuit.h(aux_qubit)
 
-            # NOTE: Statevectorでやる場合はここ
-            # statevector = Statevector.from_instruction(test_circuit)
-            # all_probs = statevector.probabilities()
-            # cutoff_index = 2**n_qubits
-            # # 補助ビットが 0 の成分の確率
-            # p0 = np.sum(all_probs[:cutoff_index])
-            # # 補助ビットが 1 の成分の確率
-            # p1 = np.sum(all_probs[cutoff_index:])
-            # real_amplitudes_statevector[f"{basis_bits}"] = p0 - p1
+            if statevector:
+                statevector = Statevector.from_instruction(test_circuit)
+                all_probs = statevector.probabilities()
+                cutoff_index = 2**n_qubits
+                # 補助ビットが 0 の成分の確率
+                p0 = np.sum(all_probs[:cutoff_index])
+                # 補助ビットが 1 の成分の確率
+                p1 = np.sum(all_probs[cutoff_index:])
+                real_amplitudes[f"{basis_bits}"] = p0 - p1
 
-            # Step 4: 補助qubitのみを測定
-            test_circuit.measure(aux_qubit, 0)
+            else:
+                # Step 4: 補助qubitのみを測定
+                test_circuit.measure(aux_qubit, 0)
 
-            print(test_circuit.draw(output="text"))
+                print(test_circuit.draw(output="text"))
 
-            # ========================================
-            # 実行と結果取得
-            # ========================================
-            transpiled_circuit = transpile(test_circuit, backend)
-            result = backend.run(transpiled_circuit, shots=SHOTS).result()
-            counts = result.get_counts()
+                # ========================================
+                # 実行と結果取得
+                # ========================================
+                transpiled_circuit = transpile(test_circuit, backend)
+                result = backend.run(transpiled_circuit, shots=SHOTS).result()
+                counts = result.get_counts()
 
-            # ========================================
-            # 結果の解析
-            # ========================================
-            # 補助qubitの測定結果のみを使用
-            aux_0 = counts.get("0", 0)
-            aux_1 = counts.get("1", 0)
-            total = aux_0 + aux_1
-            p0 = aux_0 / total
-            p1 = aux_1 / total
+                # ========================================
+                # 結果の解析
+                # ========================================
+                # 補助qubitの測定結果のみを使用
+                aux_0 = counts.get("0", 0)
+                aux_1 = counts.get("1", 0)
+                total = aux_0 + aux_1
+                p0 = aux_0 / total
+                p1 = aux_1 / total
 
-            # Hadamardテストの結果: Re(⟨basis_idx|ψ⟩) = P(0) - P(1)
-            real_part = p0 - p1
+                # Hadamardテストの結果: Re(⟨basis_idx|ψ⟩) = P(0) - P(1)
+                real_part = p0 - p1
 
-            print(f"測定結果: {counts}")
-            print(f"P(補助=0) = {p0:.4f}, P(補助=1) = {p1:.4f}")
-            print(f"実部推定値 (Re(α_{basis_idx})): {real_part:.4f}")
+                print(f"測定結果: {counts}")
+                print(f"P(補助=0) = {p0:.4f}, P(補助=1) = {p1:.4f}")
+                print(f"実部推定値 (Re(α_{basis_idx})): {real_part:.4f}")
 
-            real_amplitudes[f"{basis_bits}"] = real_part
+                real_amplitudes[f"{basis_bits}"] = real_part
 
         # ========================================
         # 結果の整理
@@ -284,6 +286,7 @@ class LSESolver:
 
 
 if __name__ == "__main__":
+    statevector = False
     A = np.array([3, 1, 1, 3]).reshape((2, 2))
     b = np.array([1, 2], dtype="complex")
 
@@ -303,8 +306,7 @@ if __name__ == "__main__":
     print(f"b:\n{np.round(b, 4)}")
 
     lse_solver = LSESolver(A=A, b=b)
-
-    x_solution = lse_solver.solve_linear_system_quantum()
+    x_solution = lse_solver.solve_linear_system_quantum(statevector=statevector)
     print(f"x_solution: {np.round(x_solution, 4)}")
     x_solution_classical = lse_solver.solve_lse_classical()
     print(f"x_solution_classical: {np.round(x_solution_classical, 4)}")
