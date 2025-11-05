@@ -1,10 +1,9 @@
 import numpy as np
 from qiskit_aer import Aer
-from qsvt_qiskit_prepared_poly import qsvt
+from qsvt import qsvt, transform_angles
 import pyqsp
 from pyqsp.angle_sequence import QuantumSignalProcessingPhases
 from pyqsp.poly import PolyOneOverX
-from qsvt_qiskit_prepared_poly import transform_angles
 
 
 def compute_matrix_inverse_qsvt(A, angles_qsvt):
