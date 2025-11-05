@@ -10,4 +10,13 @@ dependencies = [
     "qiskit-ibm-runtime>=0.43.1",
     "jupyter>=1.1.1",
     "tqdm>=4.66.0",
+    "numpy>=2.3.4",
+    "matplotlib>=3.10.7",
+    "pyqsp>=0.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "ipython>=9.6.0",
 ]
