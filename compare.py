@@ -11,7 +11,9 @@ sys.path.insert(0, str(Path(__file__).parent / "src" / "qsvt"))
 
 from src.linear_solvers import DFVQLSSolver
 from src.qsvt.lse_solver import LSESolver
-from test_combined import create_problem_2x2, create_problem_4x4, create_problem_8x8
+from test_combined import (
+    create_matrix_with_condition_number,
+)
 
 
 @dataclass
@@ -35,7 +37,7 @@ def calculate_qc_depth(qc: QuantumCircuit) -> int:
 
 
 def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
-    kappa_list = [1, 2, 3, 4]
+    kappa_list = [1, 2, 3, 4, 5, 6, 7, 8]
     results = ResultList(name="QSVT", results=[])
     for kappa in kappa_list:
         qsvt_solver = LSESolver(A, b, kappa=kappa)
@@ -105,20 +107,21 @@ def draw_result_plot(
 
 
 def main() -> None:
+    kappa = 4
     title = "2x2"
-    A, b, _ = create_problem_2x2()
+    A, b = create_matrix_with_condition_number(2, kappa)
     qsvt_results = collect_qsvt_results(A, b)
     dfvqls_results = collect_dfvqls_results(A, b)
     draw_result_plot(qsvt_results, dfvqls_results, title)
 
     title = "4x4"
-    A, b, _ = create_problem_4x4()
+    A, b = create_matrix_with_condition_number(4, kappa)
     qsvt_results = collect_qsvt_results(A, b)
     dfvqls_results = collect_dfvqls_results(A, b)
     draw_result_plot(qsvt_results, dfvqls_results, title)
 
     title = "8x8"
-    A, b, _ = create_problem_8x8()
+    A, b = create_matrix_with_condition_number(8, kappa)
     qsvt_results = collect_qsvt_results(A, b)
     dfvqls_results = collect_dfvqls_results(A, b)
     draw_result_plot(qsvt_results, dfvqls_results, title)
@@ -127,4 +130,17 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # kappa = 4
+    # A, b = create_matrix_with_condition_number(2, kappa)
+    # u, s, vh = np.linalg.svd(A)
+    # kappa = s.max() / s.min()
+    # print("2x2: ", kappa)
+    # A, b = create_matrix_with_condition_number(4, kappa)
+    # u, s, vh = np.linalg.svd(A)
+    # kappa = s.max() / s.min()
+    # print("4x4: ", kappa)
+    # A, b = create_matrix_with_condition_number(8, kappa)
+    # u, s, vh = np.linalg.svd(A)
+    # kappa = s.max() / s.min()
+    # print("8x8: ", kappa)
     main()
