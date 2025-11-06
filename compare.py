@@ -80,9 +80,9 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
             classical_solution
         )
 
-        results.results.append(Result(depth, error))
+        results.results.append(Result(depth * max_iter, error))
         print(
-            f"DF-VQLS: num_layers={max_iter}, depth={depth * max_iter}, error={error:.4f}"
+            f"DF-VQLS: max_iter={max_iter}, depth={depth * max_iter}, error={error:.4f}"
         )
 
     return results
