@@ -231,8 +231,8 @@ class DFVQLSSolver:
             Tuple of (numerator_circuit, denominator_circuit)
         """
         # Prepare states (these are cached, so efficient)
-        vec_K = self.state_preparer.prepare_matrix(K)
-        vec_KT = self.state_preparer.prepare_matrix_transpose(K)
+        vec_K, _ = self.state_preparer.prepare_matrix(K)
+        vec_KT, _ = self.state_preparer.prepare_matrix_transpose(K)
         f_norm = self.state_preparer.prepare_vector(f)
 
         # Extract |u(θ*)⟩ with optimized parameters
