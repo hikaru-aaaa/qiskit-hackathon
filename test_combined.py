@@ -13,12 +13,58 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from src.linear_solvers import DFVQLSSolver
+
+# pyqspのインストール確認
 try:
-    from src.linear_solvers import QSVTSolver
-    QSVT_AVAILABLE = True
-except ImportError as e:
+    import pyqsp
+    # pyqsp.angle_sequenceを事前にインポートして、モジュール属性として利用可能にする
+    # これにより、inverse_matrix.pyでpyqsp.angle_sequence.QuantumSignalProcessingPhasesが
+    # 正しく動作するようになる
+    import pyqsp.angle_sequence
+    import pyqsp.poly
+except ImportError:
+    print("⚠️  pyqspモジュールが見つかりません。")
+    print("    QSVTソルバーを使用するには、以下のコマンドでインストールしてください:")
+    print("    pip install pyqsp>=0.2.0")
+    print("    または")
+    print("    uv pip install pyqsp>=0.2.0")
     QSVT_AVAILABLE = False
-    print(f"⚠️  QSVT solver is not available: {e}")
+else:
+    try:
+        # sys.pathを調整して相対インポートを解決
+        import sys
+        from pathlib import Path
+        
+        # qsvtディレクトリをパスに追加（相対インポート用）
+        qsvt_dir = Path(__file__).parent / "src" / "qsvt"
+        if str(qsvt_dir) not in sys.path:
+            sys.path.insert(0, str(qsvt_dir))
+        
+        # qsvtモジュールを事前にインポート（inverse_matrix.pyのインポート用）
+        # inverse_matrix.pyが「from qsvt import qsvt, transform_angles」を使っているため
+        # qsvtをモジュールとして利用可能にする必要がある
+        import importlib.util
+        qsvt_module_path = qsvt_dir / "qsvt.py"
+        spec = importlib.util.spec_from_file_location("qsvt", qsvt_module_path)
+        qsvt_module = importlib.util.module_from_spec(spec)
+        sys.modules["qsvt"] = qsvt_module
+        spec.loader.exec_module(qsvt_module)
+        
+        # これでlse_solverをインポートできるはず
+        from src.qsvt.lse_solver import LSESolver
+        QSVT_AVAILABLE = True
+    except ImportError as e:
+        QSVT_AVAILABLE = False
+        import traceback
+        print(f"⚠️  QSVT solver is not available: {e}")
+        print("詳細なエラー:")
+        traceback.print_exc()
+    except Exception as e:
+        QSVT_AVAILABLE = False
+        import traceback
+        print(f"⚠️  QSVT solver is not available: {e}")
+        print("詳細なエラー:")
+        traceback.print_exc()
 
 
 def create_problem_2x2():
@@ -100,7 +146,7 @@ def solve_with_dfvqls(A, b, matrix_size, max_iter=100):
         return None
 
 
-def solve_with_qsvt(A, b, matrix_size):
+def solve_with_qsvt(A, b, matrix_size, use_statevector=True):
     """QSVTで解く（理論的には任意サイズに対応可能）"""
     if not QSVT_AVAILABLE:
         print("\n" + "-" * 70)
@@ -113,19 +159,15 @@ def solve_with_qsvt(A, b, matrix_size):
     # 高性能PCでのシミュレーションを想定し、制限は設けない
     
     print("\n" + "-" * 70)
-    print("QSVT Solver (Statevector)")
+    print(f"QSVT Solver ({'Statevector' if use_statevector else 'Measurement'})")
     print("-" * 70)
     
     try:
         start_time = time.time()
-        solver = QSVTSolver(
-            matrix_size=matrix_size,
-            poly_degree=100,
-            kappa=20.0,
-            verbose=False,
-            use_statevector=True
-        )
-        x_quantum, metadata = solver.solve(A, b)
+        # LSESolverは初期化時にAとbを受け取る
+        solver = LSESolver(A, b)
+        # solve_linear_system_quantum()で解を取得
+        x_quantum = solver.solve_linear_system_quantum(statevector=use_statevector)
         elapsed_time = time.time() - start_time
         
         # 誤差計算
@@ -137,14 +179,12 @@ def solve_with_qsvt(A, b, matrix_size):
         print(f"   相対誤差: {error:.6e}")
         print(f"   残差: {residual:.6e}")
         print(f"   実行時間: {elapsed_time:.2f}秒")
-        print(f"   多項式次数: {metadata.get('poly_degree', 'N/A')}")
         
         return {
             'solution': x_quantum,
             'error': error,
             'residual': residual,
-            'time': elapsed_time,
-            'poly_degree': metadata.get('poly_degree', 'N/A')
+            'time': elapsed_time
         }
     except Exception as e:
         print(f"❌ QSVTエラー: {e}")
@@ -187,8 +227,8 @@ def run_test():
         # DF-VQLSで解く
         result_dfvqls = solve_with_dfvqls(A, b, matrix_size, max_iter=max_iter)
         
-        # QSVTで解く（2×2のみ）
-        result_qsvt = solve_with_qsvt(A, b, matrix_size)
+        # QSVTで解く
+        result_qsvt = solve_with_qsvt(A, b, matrix_size, use_statevector=True)
         
         # 比較
         print("\n" + "-" * 70)
