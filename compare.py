@@ -135,7 +135,7 @@ def draw_result_plot(
     plt.title(title)
     plt.xlabel("Depth")
     plt.ylabel("Error")
-    plt.savefig(f"{title}.pdf")
+    plt.savefig(f"output/{title}.pdf")
     plt.close()
 
 
