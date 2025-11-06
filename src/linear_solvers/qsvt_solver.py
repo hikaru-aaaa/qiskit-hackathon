@@ -8,9 +8,23 @@ Quantum Singular Value Transformation (QSVT) を使用して
 from typing import Tuple
 import numpy as np
 import warnings
+import sys
+from pathlib import Path
 
 from .base import LinearSystemSolver
-from ..qsvt.generalized import QSVTSolver as GeneralizedQSVTSolver
+
+# Import LSESolver from qsvt module
+try:
+    # Ensure qsvt module can do relative imports
+    qsvt_dir = Path(__file__).parent.parent / "qsvt"
+    if str(qsvt_dir) not in sys.path:
+        sys.path.insert(0, str(qsvt_dir))
+
+    from ..qsvt.lse_solver import LSESolver
+    QSVT_AVAILABLE = True
+except ImportError as e:
+    QSVT_AVAILABLE = False
+    LSESolver = None
 
 
 class QSVTSolver(LinearSystemSolver):
@@ -34,7 +48,7 @@ class QSVTSolver(LinearSystemSolver):
     ):
         """
         QSVTソルバーを初期化
-        
+
         Args:
             matrix_size: 行列サイズ（任意サイズに対応）
             poly_degree: 多項式近似の次数
@@ -43,36 +57,57 @@ class QSVTSolver(LinearSystemSolver):
             verbose: 詳細出力
             use_statevector: statevectorモードを使用（True）または測定モード（False）
         """
+        if not QSVT_AVAILABLE:
+            raise ImportError(
+                "QSVT solver is not available. This may be due to missing dependencies (pyqsp, qiskit) "
+                "or import issues with src.qsvt.lse_solver module."
+            )
+
         # 元のqsvtブランチでは2×2限定のTODOがあったが、実装は任意サイズに対応可能
         # サイズが大きくなるとHadamardテストの計算コストが指数的に増加するが、
         # 高性能PCでのシミュレーションを想定し、制限は設けない
         # Hadamardテストの回数: 2^(n_qubits) 回
         # 2×2: 4回, 4×4: 16回, 8×8: 64回
-        
-        self.solver = GeneralizedQSVTSolver(
-            matrix_size=matrix_size,
-            poly_degree=poly_degree,
-            kappa=kappa,
-            random_seed=random_seed,
-            verbose=verbose,
-            use_statevector=use_statevector
-        )
+
+        self.matrix_size = matrix_size
+        self.verbose = verbose
+        self.use_statevector = use_statevector
+        self.poly_degree = poly_degree
+        self.kappa = kappa
     
     def solve(self, A: np.ndarray, b: np.ndarray) -> Tuple[np.ndarray, dict]:
         """
         線形方程式系 Ax = b をQSVTで解く
-        
+
         Args:
             A: 係数行列 (N×N)
             b: 右辺ベクトル (N,)
-            
+
         Returns:
             Tuple of (解ベクトル, メタデータ)
         """
-        x_quantum, metadata = self.solver.solve(A, b)
-        
-        # メタデータに追加情報を追加
-        metadata['use_statevector'] = self.solver.use_statevector
-        
+        import time
+
+        # Create LSESolver instance for this problem
+        solver = LSESolver(A, b)
+
+        # Solve using QSVT
+        t0 = time.time()
+        x_quantum = solver.solve_linear_system_quantum(statevector=self.use_statevector)
+        t_solve = time.time() - t0
+
+        # Calculate error
+        x_classical = np.linalg.solve(A, b)
+        error = np.linalg.norm(x_quantum - x_classical) / np.linalg.norm(x_classical)
+
+        # Build metadata
+        metadata = {
+            'method': 'QSVT',
+            'time': t_solve,
+            'error': error,
+            'use_statevector': self.use_statevector,
+            'matrix_size': self.matrix_size
+        }
+
         return x_quantum, metadata
 

@@ -49,12 +49,14 @@ class HybridSolver(LinearSystemSolver):
         dfvqls_random_seed: int = None,
         # ハイブリッドパラメータ
         use_qsvt_initialization: bool = True,
+        use_parameter_init: bool = True,
+        init_optimization_budget: int = 50,
         max_iter_refinement: Optional[int] = None,
         verbose: bool = True
     ):
         """
         ハイブリッドソルバーを初期化
-        
+
         Args:
             matrix_size: 行列サイズ
             qsvt_poly_degree: QSVTの多項式近似の次数
@@ -65,11 +67,15 @@ class HybridSolver(LinearSystemSolver):
             dfvqls_max_iter: DFVQLSの最大反復回数
             dfvqls_random_seed: DFVQLSのランダムシード
             use_qsvt_initialization: QSVTの解を初期値として使用するか
+            use_parameter_init: QSVTの解をDF-VQLSパラメータ初期化に使用するか
+            init_optimization_budget: パラメータ初期化の最適化回数上限
             max_iter_refinement: 精密化の最大反復回数（Noneの場合はdfvqls_max_iterを使用）
             verbose: 詳細出力
         """
         self.matrix_size = matrix_size
         self.use_qsvt_initialization = use_qsvt_initialization
+        self.use_parameter_init = use_parameter_init
+        self.init_optimization_budget = init_optimization_budget
         self.max_iter_refinement = max_iter_refinement or dfvqls_max_iter
         self.verbose = verbose
         
@@ -159,15 +165,49 @@ class HybridSolver(LinearSystemSolver):
             print("\n" + "=" * 70)
             print("ハイブリッドソルバー: Step 2 - DFVQLSで精密化")
             print("=" * 70)
-            if x_initial is not None:
-                print(f"初期値としてQSVTの解を使用")
-            else:
+
+        # Convert QSVT solution to initial parameters if enabled
+        initial_params = None
+        if x_initial is not None and self.use_parameter_init:
+            if self.verbose:
+                print("QSVTの解を初期パラメータに変換中...")
+
+            try:
+                import time
+                from ..vqls.generalized.utils import qsvt_to_theta_initialization
+
+                t0 = time.time()
+
+                initial_params = qsvt_to_theta_initialization(
+                    x_qsvt=x_initial,
+                    ansatz=self.dfvqls_solver.solver.ansatz,
+                    num_qubits=self.dfvqls_solver.solver.n_qubits,
+                    max_iter=self.init_optimization_budget,
+                    verbose=self.verbose
+                )
+
+                t_convert = time.time() - t0
+
+                if self.verbose:
+                    print(f"パラメータ変換完了 ({t_convert:.2f}秒)")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"⚠️  パラメータ変換失敗: {e}")
+                    print("    ランダム初期化を使用します")
+                initial_params = None
+        elif x_initial is not None:
+            if self.verbose:
+                print("QSVTの解を取得済み（パラメータ初期化はスキップ）")
+        else:
+            if self.verbose:
                 print("初期値はランダム（QSVT未使用）")
-        
-        # DFVQLSで解を求める
-        # 注意: 現在のDFVQLS実装は初期値の設定をサポートしていない可能性があるため、
-        # 通常通りDFVQLSを実行する
-        x_final, dfvqls_metadata = self.dfvqls_solver.solve(A, b)
+
+        # DFVQLSで解を求める (with or without initial params)
+        x_final, dfvqls_metadata = self.dfvqls_solver.solve(
+            A, b,
+            initial_params=initial_params
+        )
         
         metadata['dfvqls_result'] = {
             'solution': x_final,

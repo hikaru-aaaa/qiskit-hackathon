@@ -101,20 +101,24 @@ class DFVQLSSolver:
     def solve(
         self,
         K: np.ndarray,
-        f: np.ndarray
+        f: np.ndarray,
+        initial_params: Optional[np.ndarray] = None
     ) -> Tuple[np.ndarray, OptimizeResult]:
         """
         Solve the linear system Ku = f.
-        
+
         Args:
             K: Coefficient matrix (N×N, must match matrix_size)
             f: Right-hand side vector (N×1)
-        
+            initial_params: Optional initial parameters for ansatz (default: random)
+                If provided, must have shape (num_qubits × num_layers,)
+                Useful for warm-starting from QSVT or previous solutions
+
         Returns:
             Tuple of (solution_vector, optimization_result)
-        
+
         Raises:
-            ValueError: If matrix/vector dimensions don't match
+            ValueError: If matrix/vector dimensions don't match or invalid initial_params
         """
         # Validate inputs
         if K.shape != (self.matrix_size, self.matrix_size):
@@ -142,10 +146,22 @@ class DFVQLSSolver:
             print(f"Optimizer: {self.optimizer.method}")
             print(f"Parallel execution: {'Enabled' if self.use_parallel else 'Disabled'}")
             print("=" * 70 + "\n")
-        
-        # Initialize random parameters
+
+        # Initialize parameters (random or provided)
         num_params = self.ansatz.num_parameters()
-        initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+        if initial_params is None:
+            initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+            if self.verbose:
+                print("Using random initial parameters")
+        else:
+            # Validate shape
+            if initial_params.shape != (num_params,):
+                raise ValueError(
+                    f"initial_params must have shape ({num_params},), "
+                    f"got {initial_params.shape}"
+                )
+            if self.verbose:
+                print("Using provided initial parameters (warm start)")
         
         # Create cost function wrapper
         def cost_fn(params, pbar=None):

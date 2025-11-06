@@ -1,5 +1,6 @@
 import numpy as np
 import pyqsp
+import pyqsp.angle_sequence  # Required for pyqsp.angle_sequence.QuantumSignalProcessingPhases
 from qiskit_aer import Aer
 
 from qsvt import qsvt, transform_angles

@@ -51,19 +51,25 @@ class DFVQLSSolver(LinearSystemSolver):
             use_parallel=use_parallel
         )
     
-    def solve(self, A: np.ndarray, b: np.ndarray) -> Tuple[np.ndarray, dict]:
+    def solve(
+        self,
+        A: np.ndarray,
+        b: np.ndarray,
+        initial_params: np.ndarray = None
+    ) -> Tuple[np.ndarray, dict]:
         """
         線形方程式系 Ax = b をDF-VQLSで解く
-        
+
         Args:
             A: 係数行列 (N×N)
             b: 右辺ベクトル (N,)
-            
+            initial_params: 初期パラメータ (optional, warm start用)
+
         Returns:
             Tuple of (解ベクトル, メタデータ)
         """
-        x_quantum, result = self.solver.solve(A, b)
-        
+        x_quantum, result = self.solver.solve(A, b, initial_params=initial_params)
+
         metadata = {
             'method': 'DF-VQLS',
             'final_cost': result.fun,
@@ -71,6 +77,6 @@ class DFVQLSSolver(LinearSystemSolver):
             'success': result.success,
             'optimize_result': result
         }
-        
+
         return x_quantum, metadata
 
