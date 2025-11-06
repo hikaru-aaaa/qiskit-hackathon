@@ -50,27 +50,18 @@ class LSESolver:
         full_unitary, qsvt_circuit, encoding_wires, _ = compute_matrix_inverse_qsvt(
             self.A_normalized, angles_qsvt
         )
-        print(f"full_unitary:\n{np.round(full_unitary, 4)}")
-        print(f"scale: {s}")
 
         n_sys = int(np.ceil(np.log2(len(self.b))))
         sys_wires = list[int, ...](range(n_sys))
-        print("sys_wires:", sys_wires)
 
         # 3) 合成用の土台回路は “QSVT回路と同じ本数” にする
         combined_circuit = QuantumCircuit(qsvt_circuit.num_qubits)
 
         # 4) |b> を “系” の量子ビットにだけ初期化
         combined_circuit.initialize(b_normalized, sys_wires)
-        init_state = Statevector.from_instruction(combined_circuit)
-        print("Initial statevector before QSVT:")
-        print(np.round(init_state.data, 4))
 
         # # 5) QSVT を合成（qubit 並びが一致していればOK）
         combined_circuit.compose(qsvt_circuit, inplace=True)
-        final_state = Statevector.from_instruction(combined_circuit)
-        print("Statevector after QSVT:")
-        print(np.round(final_state.data, 4))
 
         # # Step 5: 測定で解xを取得
         # # システムレジスタのみ測定（アンシラは無視）
@@ -88,7 +79,6 @@ class LSESolver:
         real_amplitudes = self.measure_real_amplitudes(
             qsvt_circuit, b_normalized, statevector
         )
-        print("real_amplitudes:", real_amplitudes)
 
         # スケールを調整
         x_solution = (
@@ -119,18 +109,10 @@ class LSESolver:
 
         real_amplitudes = {}
 
-        print("=" * 60)
-        print("Hadamardテストによる全基底状態の実部測定")
-        print(
-            f"総qubit数: {n_qubits} (うち|b⟩初期化: {n_sys}), 基底状態数: {n_total_states}"
-        )
-        print("=" * 60)
-
         # 各基底状態に対してHadamardテストを実行
         for basis_idx in range(n_total_states):
             # 基底状態のビット表現 (Qiskitのエンディアンに合わせる)
             basis_bits = format(basis_idx, f"0{n_qubits}b")
-            print(f"\n--- 基底状態 |{basis_bits}⟩ (idx={basis_idx}) の実振幅を測定 ---")
 
             # ========================================
             # Hadamardテスト回路の構築
@@ -228,16 +210,6 @@ class LSESolver:
         # 結果の整理
         # ========================================
 
-        print("\n" + "=" * 60)
-        print("測定結果まとめ")
-        print("=" * 60)
-        print("全基底状態の期待値の実部:")
-        for i in range(n_total_states):
-            bits = format(i, f"0{n_qubits}b")
-            print(f"  |{bits}⟩: {real_amplitudes[bits]:.4f}")
-
-        print("=" * 60)
-
         # 後処理用に全ての振幅を返す
         return real_amplitudes
         # return real_amplitudes_statevector
@@ -251,14 +223,11 @@ class LSESolver:
         post_amplitudes = {
             bits: c for bits, c in real_amplitudes.items() if bits[0] == "0"
         }
-        print("post_amplitudes:", post_amplitudes)
 
         amp_sys = np.zeros(len(post_amplitudes))
         for bits, c in post_amplitudes.items():
             sys_bit = bits[1:]  # 右側がsystem
             amp_sys[int(sys_bit, 2)] = c
-
-        print("amp_sys:", amp_sys)
 
         return amp_sys
 
@@ -278,7 +247,7 @@ class LSESolver:
 
 
 if __name__ == "__main__":
-    statevector = False
+    statevector = True
     # A = np.array([3, 1, 1, 3]).reshape((2, 2))
     # b = np.array([1, 2], dtype="complex")
 
@@ -298,7 +267,7 @@ if __name__ == "__main__":
     print(f"b:\n{np.round(b, 4)}")
 
     lse_solver = LSESolver(A=A, b=b)
-    x_solution = lse_solver.solve_linear_system_quantum(statevector=statevector)
+    x_solution, _ = lse_solver.solve_linear_system_quantum(statevector=statevector)
     print(f"x_solution: {np.round(x_solution, 4)}")
     x_solution_classical = lse_solver.solve_lse_classical()
     print(f"x_solution_classical: {np.round(x_solution_classical, 4)}")

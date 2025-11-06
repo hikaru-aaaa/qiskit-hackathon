@@ -1,10 +1,15 @@
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from qiskit import QuantumCircuit
 
-from qsvt.lse_solver import LSESolver
+# Add src/qsvt to Python path for inverse_matrix import
+sys.path.insert(0, str(Path(__file__).parent / "src" / "qsvt"))
+
+from src.qsvt.lse_solver import LSESolver
 from test_combined import create_problem_2x2, create_problem_4x4, create_problem_8x8
 
 
@@ -29,7 +34,7 @@ def calculate_qc_depth(qc: QuantumCircuit) -> int:
 
 
 def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
-    kappa_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    kappa_list = [1, 2, 3, 4]
     results = ResultList(name="QSVT", results=[])
     for kappa in kappa_list:
         qsvt_solver = LSESolver(A, b, kappa=kappa)
@@ -44,7 +49,7 @@ def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
 
 
 def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
-    pass
+    return collect_qsvt_results(A, b)
 
 
 def draw_result_plot(
@@ -64,7 +69,7 @@ def draw_result_plot(
     plt.title(title)
     plt.xlabel("Depth")
     plt.ylabel("Error")
-    plt.savefig(f"{title}.png")
+    plt.savefig(f"{title}.pdf")
     plt.close()
 
 

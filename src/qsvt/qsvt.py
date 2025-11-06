@@ -118,7 +118,6 @@ def block_encode_pennylane(matrix, wires):
         U_full[:current_size, :current_size] = U
         U = U_full
 
-    print("block_encode_pennylane U:\n", np.round(U, 4))
     # Create quantum circuit
     qc = QuantumCircuit(num_qubits)
     qc.unitary(U, wires, label="BlockEncode")
