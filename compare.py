@@ -53,16 +53,16 @@ def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
 
 
 def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
-    num_layers_list = [1, 2, 3, 4, 5]
+    max_iter_num = [100, 200, 300, 400, 500]
     results = ResultList(name="DF-VQLS", results=[])
 
-    for num_layers in num_layers_list:
+    for max_iter in max_iter_num:
         # Create DF-VQLS solver with varying num_layers
         dfvqls_solver = DFVQLSSolver(
             matrix_size=len(A),
-            num_layers=num_layers,
+            num_layers=2,
             optimizer_method="COBYLA",
-            max_iter=200,
+            max_iter=max_iter,
             verbose=False,
         )
 
@@ -81,7 +81,9 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
         )
 
         results.results.append(Result(depth, error))
-        print(f"DF-VQLS: num_layers={num_layers}, depth={depth}, error={error:.4f}")
+        print(
+            f"DF-VQLS: num_layers={max_iter}, depth={depth * max_iter}, error={error:.4f}"
+        )
 
     return results
 
