@@ -13,6 +13,11 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from src.linear_solvers import DFVQLSSolver
+try:
+    from src.linear_solvers import HybridSolver
+    HYBRID_AVAILABLE = True
+except ImportError as e:
+    HYBRID_AVAILABLE = False
 
 # pyqspのインストール確認
 try:
@@ -193,10 +198,66 @@ def solve_with_qsvt(A, b, matrix_size, use_statevector=True):
         return None
 
 
+def solve_with_hybrid(A, b, matrix_size, max_iter=100):
+    """ハイブリッドソルバーで解く"""
+    if not HYBRID_AVAILABLE:
+        print("\n" + "-" * 70)
+        print("Hybrid Solver (利用不可)")
+        print("-" * 70)
+        return None
+    
+    print("\n" + "-" * 70)
+    print("Hybrid Solver (QSVT + DF-VQLS)")
+    print("-" * 70)
+    
+    try:
+        start_time = time.time()
+        solver = HybridSolver(
+            matrix_size=matrix_size,
+            qsvt_poly_degree=100,
+            qsvt_kappa=20.0,
+            qsvt_use_statevector=True,
+            dfvqls_num_layers=3 if matrix_size >= 4 else 2,
+            dfvqls_optimizer_method='COBYLA',
+            dfvqls_max_iter=max_iter,
+            dfvqls_random_seed=42,
+            use_qsvt_initialization=True,
+            verbose=False
+        )
+        x_quantum, metadata = solver.solve(A, b)
+        elapsed_time = time.time() - start_time
+        
+        # 誤差計算
+        x_classical = np.linalg.solve(A, b)
+        error = metadata.get('final_error', np.linalg.norm(x_quantum - x_classical) / np.linalg.norm(x_classical))
+        residual = metadata.get('final_residual', np.linalg.norm(A @ x_quantum - b))
+        
+        print(f"✅ ハイブリッド解: {x_quantum}")
+        print(f"   相対誤差: {error:.6e}")
+        print(f"   残差: {residual:.6e}")
+        print(f"   実行時間: {elapsed_time:.2f}秒")
+        print(f"   QSVT使用: {metadata.get('qsvt_used', False)}")
+        print(f"   反復回数: {metadata.get('dfvqls_result', {}).get('iterations', 'N/A')}")
+        
+        return {
+            'solution': x_quantum,
+            'error': error,
+            'residual': residual,
+            'time': elapsed_time,
+            'qsvt_used': metadata.get('qsvt_used', False),
+            'iterations': metadata.get('dfvqls_result', {}).get('iterations', 'N/A')
+        }
+    except Exception as e:
+        print(f"❌ ハイブリッドエラー: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def run_test():
     """全問題をテスト"""
     print("=" * 70)
-    print("統合テスト: DF-VQLS vs QSVT")
+    print("統合テスト: DF-VQLS vs QSVT vs Hybrid")
     print("=" * 70)
     print("\n2×2, 4×4, 8×8の3つの問題でテストします。")
     
@@ -230,6 +291,9 @@ def run_test():
         # QSVTで解く
         result_qsvt = solve_with_qsvt(A, b, matrix_size, use_statevector=True)
         
+        # ハイブリッドで解く
+        result_hybrid = solve_with_hybrid(A, b, matrix_size, max_iter=max_iter)
+        
         # 比較
         print("\n" + "-" * 70)
         print("比較")
@@ -239,12 +303,15 @@ def run_test():
             print(f"DF-VQLS: {result_dfvqls['solution']} (誤差: {result_dfvqls['error']:.6e})")
         if result_qsvt:
             print(f"QSVT:    {result_qsvt['solution']} (誤差: {result_qsvt['error']:.6e})")
+        if result_hybrid:
+            print(f"Hybrid:  {result_hybrid['solution']} (誤差: {result_hybrid['error']:.6e})")
         
         results.append({
             'problem': problem_name,
             'matrix_size': matrix_size,
             'dfvqls': result_dfvqls,
             'qsvt': result_qsvt,
+            'hybrid': result_hybrid,
             'classical': x_classical
         })
     
@@ -253,8 +320,8 @@ def run_test():
     print("テスト結果サマリー")
     print("=" * 70)
     
-    print(f"\n{'問題':<30} {'DF-VQLS誤差':<15} {'QSVT誤差':<15} {'DF-VQLS時間':<15} {'QSVT時間':<15}")
-    print("-" * 90)
+    print(f"\n{'問題':<30} {'DF-VQLS誤差':<15} {'QSVT誤差':<15} {'Hybrid誤差':<15} {'DF-VQLS時間':<15} {'QSVT時間':<15} {'Hybrid時間':<15}")
+    print("-" * 120)
     
     for result in results:
         problem_name = result['problem']
@@ -272,7 +339,14 @@ def run_test():
             qsvt_error = "N/A (未対応)"
             qsvt_time = "N/A"
         
-        print(f"{problem_name:<30} {dfvqls_error:<15} {qsvt_error:<15} {dfvqls_time:<15} {qsvt_time:<15}")
+        if result['hybrid']:
+            hybrid_error = f"{result['hybrid']['error']:.6e}"
+            hybrid_time = f"{result['hybrid']['time']:.2f}s"
+        else:
+            hybrid_error = "N/A"
+            hybrid_time = "N/A"
+        
+        print(f"{problem_name:<30} {dfvqls_error:<15} {qsvt_error:<15} {hybrid_error:<15} {dfvqls_time:<15} {qsvt_time:<15} {hybrid_time:<15}")
     
     print("\n" + "=" * 70)
     print("✅ 統合テスト完了")

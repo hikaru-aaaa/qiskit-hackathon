@@ -9,8 +9,14 @@ from .dfvqls_solver import DFVQLSSolver
 
 try:
     from .qsvt_solver import QSVTSolver
-    __all__ = ['LinearSystemSolver', 'DFVQLSSolver', 'QSVTSolver']
+    from .hybrid_solver import HybridSolver
+    __all__ = ['LinearSystemSolver', 'DFVQLSSolver', 'QSVTSolver', 'HybridSolver']
 except ImportError:
     # QSVTモジュールが利用できない場合
-    __all__ = ['LinearSystemSolver', 'DFVQLSSolver']
+    try:
+        from .hybrid_solver import HybridSolver
+        __all__ = ['LinearSystemSolver', 'DFVQLSSolver', 'HybridSolver']
+    except ImportError:
+        # HybridSolverも利用できない場合
+        __all__ = ['LinearSystemSolver', 'DFVQLSSolver']
 
