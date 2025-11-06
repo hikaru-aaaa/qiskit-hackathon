@@ -1,5 +1,6 @@
+import json
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -85,9 +86,41 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
     return results
 
 
+def save_result_lists(
+    result_list1: ResultList, result_list2: ResultList, filename: str
+) -> None:
+    """Save ResultList data to JSON file for later access."""
+    data = {
+        "result_list1": asdict(result_list1),
+        "result_list2": asdict(result_list2),
+    }
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Results saved to {filename}")
+
+
+def load_result_lists(filename: str) -> tuple[ResultList, ResultList]:
+    """Load ResultList data from JSON file."""
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    result_list1 = ResultList(
+        name=data["result_list1"]["name"],
+        results=[Result(**r) for r in data["result_list1"]["results"]],
+    )
+    result_list2 = ResultList(
+        name=data["result_list2"]["name"],
+        results=[Result(**r) for r in data["result_list2"]["results"]],
+    )
+    return result_list1, result_list2
+
+
 def draw_result_plot(
     result_list1: ResultList, result_list2: ResultList, title: str
 ) -> None:
+    data_filename = f"output/{title}_data.json"
+    save_result_lists(result_list1, result_list2, data_filename)
+
     plt.plot(
         [result.depth for result in result_list1.results],
         [result.error for result in result_list1.results],
