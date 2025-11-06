@@ -3,7 +3,7 @@ import pyqsp
 import pyqsp.angle_sequence  # Required for pyqsp.angle_sequence.QuantumSignalProcessingPhases
 from qiskit_aer import Aer
 
-from qsvt import qsvt, transform_angles
+from .qsvt import qsvt, transform_angles
 
 
 def compute_matrix_inverse_qsvt(A, angles_qsvt):
