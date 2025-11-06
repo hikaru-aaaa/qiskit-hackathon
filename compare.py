@@ -37,7 +37,7 @@ def calculate_qc_depth(qc: QuantumCircuit) -> int:
     return depth
 
 
-def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
+def collect_qsvt_results(A: np.ndarray, b: np.ndarray, title: str) -> ResultList:
     kappa_list = [1, 2, 3, 4, 5, 6, 7, 8]
     results = ResultList(name="QSVT", results=[])
     for kappa in kappa_list:
@@ -49,10 +49,12 @@ def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
             classical_solution
         )
         results.results.append(Result(depth, error))
+
+    save_result_list(results, f"output/qsvt_{title}.json")
     return results
 
 
-def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
+def collect_dfvqls_results(A: np.ndarray, b: np.ndarray, title: str) -> ResultList:
     max_iter_num = [100, 200, 300, 400, 500]
     results = ResultList(name="DF-VQLS", results=[])
 
@@ -85,44 +87,33 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
             f"DF-VQLS: max_iter={max_iter}, depth={depth * max_iter}, error={error:.4f}"
         )
 
+    save_result_list(results, f"output/dfvqls_{title}.json")
     return results
 
 
-def save_result_lists(
-    result_list1: ResultList, result_list2: ResultList, filename: str
-) -> None:
-    """Save ResultList data to JSON file for later access."""
-    data = {
-        "result_list1": asdict(result_list1),
-        "result_list2": asdict(result_list2),
-    }
+def save_result_list(result_list: ResultList, filename: str) -> None:
+    """Save a single ResultList to JSON file."""
+    data = asdict(result_list)
     with open(filename, "w") as f:
         json.dump(data, f, indent=2)
-    print(f"Results saved to {filename}")
+    print(f"Result saved to {filename}")
 
 
-def load_result_lists(filename: str) -> tuple[ResultList, ResultList]:
-    """Load ResultList data from JSON file."""
+def load_result_list(filename: str) -> ResultList:
+    """Load a single ResultList from JSON file."""
     with open(filename, "r") as f:
         data = json.load(f)
 
-    result_list1 = ResultList(
-        name=data["result_list1"]["name"],
-        results=[Result(**r) for r in data["result_list1"]["results"]],
+    result_list = ResultList(
+        name=data["name"],
+        results=[Result(**r) for r in data["results"]],
     )
-    result_list2 = ResultList(
-        name=data["result_list2"]["name"],
-        results=[Result(**r) for r in data["result_list2"]["results"]],
-    )
-    return result_list1, result_list2
+    return result_list
 
 
 def draw_result_plot(
     result_list1: ResultList, result_list2: ResultList, title: str
 ) -> None:
-    data_filename = f"output/{title}_data.json"
-    save_result_lists(result_list1, result_list2, data_filename)
-
     plt.plot(
         [result.depth for result in result_list1.results],
         [result.error for result in result_list1.results],
@@ -143,22 +134,22 @@ def draw_result_plot(
 
 def main() -> None:
     kappa = 4
-    title = "2x2"
+    title = f"2x2_kappa={kappa}"
     A, b = create_matrix_with_condition_number(2, kappa)
-    qsvt_results = collect_qsvt_results(A, b)
-    dfvqls_results = collect_dfvqls_results(A, b)
+    qsvt_results = collect_qsvt_results(A, b, title)
+    dfvqls_results = collect_dfvqls_results(A, b, title)
     draw_result_plot(qsvt_results, dfvqls_results, title)
 
-    title = "4x4"
+    title = f"4x4_kappa={kappa}"
     A, b = create_matrix_with_condition_number(4, kappa)
-    qsvt_results = collect_qsvt_results(A, b)
-    dfvqls_results = collect_dfvqls_results(A, b)
+    qsvt_results = collect_qsvt_results(A, b, title)
+    dfvqls_results = collect_dfvqls_results(A, b, title)
     draw_result_plot(qsvt_results, dfvqls_results, title)
 
-    title = "8x8"
+    title = f"8x8_kappa={kappa}"
     A, b = create_matrix_with_condition_number(8, kappa)
-    qsvt_results = collect_qsvt_results(A, b)
-    dfvqls_results = collect_dfvqls_results(A, b)
+    qsvt_results = collect_qsvt_results(A, b, title)
+    dfvqls_results = collect_dfvqls_results(A, b, title)
     draw_result_plot(qsvt_results, dfvqls_results, title)
 
     return
