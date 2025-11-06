@@ -16,16 +16,13 @@ class LSESolver:
     QSVTと古典的な方法の両方をサポート
     """
 
-    def __init__(self, A, b):
+    def __init__(self, A, b, kappa=4):
         self.A = np.asarray(A, dtype=complex)
         self.b = np.asarray(b, dtype=complex)
         self.n, self.m = self.A.shape
         self.frobenius_norm = np.linalg.norm(self.A, ord="fro")
         self.A_normalized = self.A / self.frobenius_norm
-
-    def compute_kappa(self):
-        # TODO: 後で実装。
-        return 4
+        self.kappa = kappa
 
     def solve_lse_classical(self):
         """
@@ -36,15 +33,10 @@ class LSESolver:
 
         return x_solution
 
-    def solve_linear_system_quantum(self, statevector=False):
+    def solve_linear_system_quantum(self, statevector=True):
         """
         実際の量子デバイスでの連立一次方程式の解法
         """
-        # TODO: 符号の情報が抜け落ちるのでアダマール変換組み込む？
-        # TODO: まだはじめのバージョンなので2x2限定なので、一般の正方行列で実装する必要あり。
-        # 変更部分は補助ビットの数などだと思われる。
-        # TODO: 逆行列まではある程度精度高くもとまるが、最終のxの値が間違っているので修正。
-
         # 1) b を正規化（複素数型にしておくと無難）
         b_norm = np.linalg.norm(self.b)
         b_normalized = (self.b / b_norm).astype(complex)
@@ -52,7 +44,7 @@ class LSESolver:
         # 2) QSVT回路を取得（戻り値は適宜合わせて）
         #    qsvt_circuit: ユニタリ全体）
 
-        kappa = self.compute_kappa()
+        kappa = self.kappa
         angles_qsvt, s = generate_angles_qsvt_and_scale(kappa)
 
         full_unitary, qsvt_circuit, encoding_wires, _ = compute_matrix_inverse_qsvt(
@@ -105,7 +97,7 @@ class LSESolver:
             / (s * self.frobenius_norm)
         )
 
-        return x_solution
+        return x_solution, qsvt_circuit
 
     def measure_real_amplitudes(self, qsvt_circuit, b_normalized, statevector=False):
         """
