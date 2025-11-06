@@ -1,5 +1,5 @@
 import numpy as np
-from inverse_matrix import compute_matrix_inverse_qsvt, generate_angles_qsvt_and_scale
+from .inverse_matrix import compute_matrix_inverse_qsvt, generate_angles_qsvt_and_scale
 from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation
 from qiskit.quantum_info import Statevector

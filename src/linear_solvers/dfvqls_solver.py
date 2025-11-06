@@ -7,6 +7,7 @@ Decomposition-Free Variational Quantum Linear Solverを提供します。
 from typing import Tuple
 import numpy as np
 from scipy.optimize import OptimizeResult
+from qiskit import QuantumCircuit
 
 from .base import LinearSystemSolver
 from ..vqls.generalized import DFVQLSSolver as GeneralizedDFVQLSSolver
@@ -15,23 +16,23 @@ from ..vqls.generalized import DFVQLSSolver as GeneralizedDFVQLSSolver
 class DFVQLSSolver(LinearSystemSolver):
     """
     DF-VQLS実装
-    
+
     Generalized DF-VQLSをラップして、統一インターフェースを提供します。
     """
-    
+
     def __init__(
         self,
         matrix_size: int,
         num_layers: int = 3,
-        optimizer_method: str = 'COBYLA',
+        optimizer_method: str = "COBYLA",
         max_iter: int = 200,
         random_seed: int = None,
         verbose: bool = True,
-        use_parallel: bool = False
+        use_parallel: bool = False,
     ):
         """
         DF-VQLSソルバーを初期化
-        
+
         Args:
             matrix_size: 行列サイズ（2のべき乗のみ）
             num_layers: アンサッツの層数
@@ -48,15 +49,12 @@ class DFVQLSSolver(LinearSystemSolver):
             max_iter=max_iter,
             random_seed=random_seed,
             verbose=verbose,
-            use_parallel=use_parallel
+            use_parallel=use_parallel,
         )
-    
+
     def solve(
-        self,
-        A: np.ndarray,
-        b: np.ndarray,
-        initial_params: np.ndarray = None
-    ) -> Tuple[np.ndarray, dict]:
+        self, A: np.ndarray, b: np.ndarray, initial_params: np.ndarray = None
+    ) -> Tuple[np.ndarray, dict, Tuple[QuantumCircuit, QuantumCircuit]]:
         """
         線形方程式系 Ax = b をDF-VQLSで解く
 
@@ -66,17 +64,16 @@ class DFVQLSSolver(LinearSystemSolver):
             initial_params: 初期パラメータ (optional, warm start用)
 
         Returns:
-            Tuple of (解ベクトル, メタデータ)
+            Tuple of (解ベクトル, メタデータ, (numerator_circuit, denominator_circuit))
         """
-        x_quantum, result = self.solver.solve(A, b, initial_params=initial_params)
+        x_quantum, result, circuits = self.solver.solve(A, b, initial_params=initial_params)
 
         metadata = {
-            'method': 'DF-VQLS',
-            'final_cost': result.fun,
-            'iterations': result.nfev,
-            'success': result.success,
-            'optimize_result': result
+            "method": "DF-VQLS",
+            "final_cost": result.fun,
+            "iterations": result.nfev,
+            "success": result.success,
+            "optimize_result": result,
         }
 
-        return x_quantum, metadata
-
+        return x_quantum, metadata, circuits

@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from qiskit import QuantumCircuit
 
-from qsvt.lse_solver import LSESolver
+from src.qsvt.lse_solver import LSESolver
+from src.linear_solvers import DFVQLSSolver
 from test_combined import create_problem_2x2, create_problem_4x4, create_problem_8x8
 
 
@@ -44,7 +45,37 @@ def collect_qsvt_results(A: np.ndarray, b: np.ndarray) -> ResultList:
 
 
 def collect_dfvqls_results(A: np.ndarray, b: np.ndarray) -> ResultList:
-    pass
+    num_layers_list = [1, 2, 3, 4, 5]
+    results = ResultList(name="DF-VQLS", results=[])
+
+    for num_layers in num_layers_list:
+        # Create DF-VQLS solver with varying num_layers
+        dfvqls_solver = DFVQLSSolver(
+            matrix_size=len(A),
+            num_layers=num_layers,
+            optimizer_method="COBYLA",
+            max_iter=200,
+            verbose=False,
+        )
+
+        # Solve and get circuits
+        x_solution, metadata, (num_circuit, den_circuit) = dfvqls_solver.solve(A, b)
+
+        # Calculate max depth (critical path for parallel execution)
+        depth_num = calculate_qc_depth(num_circuit)
+        depth_den = calculate_qc_depth(den_circuit)
+        depth = max(depth_num, depth_den)
+
+        # Calculate error
+        classical_solution = np.linalg.solve(A, b)
+        error = np.linalg.norm(x_solution - classical_solution) / np.linalg.norm(
+            classical_solution
+        )
+
+        results.results.append(Result(depth, error))
+        print(f"DF-VQLS: num_layers={num_layers}, depth={depth}, error={error:.4f}")
+
+    return results
 
 
 def draw_result_plot(
