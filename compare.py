@@ -65,7 +65,8 @@ def collect_dfvqls_results(
     b: np.ndarray,
     title: str,
     qsvt_depth: int = None,
-    use_preconditioning: bool = False
+    use_preconditioning: bool = False,
+    optimizer_method: str = "BFGS"
 ) -> ResultList:
     """
     Collect DF-VQLS results, optionally matching QSVT depth budget.
@@ -76,6 +77,7 @@ def collect_dfvqls_results(
         title: Title for saving results
         qsvt_depth: If provided, run DF-VQLS until total depth matches this value
         use_preconditioning: If True, apply Jacobi preconditioning (improves convergence)
+        optimizer_method: Optimization method ('BFGS', 'COBYLA', 'L-BFGS-B', etc.)
     """
     results = ResultList(name="DF-VQLS" + (" (Precond)" if use_preconditioning else ""), results=[])
 
@@ -91,7 +93,7 @@ def collect_dfvqls_results(
     temp_solver = DFVQLSSolver(
         matrix_size=len(A),
         num_layers=2,
-        optimizer_method="COBYLA",
+        optimizer_method=optimizer_method,
         max_iter=1,
         verbose=False,
     )
@@ -125,12 +127,13 @@ def collect_dfvqls_results(
     dfvqls_solver = DFVQLSSolver(
         matrix_size=len(A),
         num_layers=2,
-        optimizer_method="COBYLA",
+        optimizer_method=optimizer_method,
         max_iter=max_iter,
         verbose=False,
     )
 
     print(f"\nDF-VQLS: Running optimization with max_iter={max_iter}")
+    print(f"  Optimizer: {optimizer_method}")
     x_solution, metadata, (num_circuit, den_circuit) = dfvqls_solver.solve(
         A_work, b_work, track_iterations=True
     )
@@ -143,11 +146,11 @@ def collect_dfvqls_results(
     # Extract iteration history
     iteration_history = metadata.get("iteration_history", [])
 
-    # Check if COBYLA converged early
+    # Check if optimizer converged early
     actual_iterations = len(iteration_history)
     if actual_iterations < max_iter:
         print(
-            f"Note: COBYLA converged early at iteration {actual_iterations}/{max_iter}"
+            f"Note: {optimizer_method} converged early at iteration {actual_iterations}/{max_iter}"
         )
 
     # Extract results at EVERY iteration instead of just checkpoints
