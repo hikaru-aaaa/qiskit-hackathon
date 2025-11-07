@@ -256,10 +256,11 @@ def main() -> None:
     QiskitRuntimeService.save_account(
         channel="ibm_quantum_platform",
         token=os.getenv("API_KEY"),
+        instance=os.getenv("CRN"),
         overwrite=True,
     )
 
-    has_noise_list = [True]
+    has_noise_list = [False, True]
     for has_noise in has_noise_list:
         if has_noise:
             service = QiskitRuntimeService()
