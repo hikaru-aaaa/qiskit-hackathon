@@ -89,13 +89,20 @@ class CircuitBuilder:
         
         Uses vectorization: |⟨f|K|u(θ)⟩|² = ||K||² |⟨vec(K)|u(θ),f⟩|²
         
+        According to the paper's circuit (a):
+        - |ψ₁⟩ = |vec(K)⟩_nq ⊗ |0⟩_nq
+        - |ψ₂⟩ = |u(θ)⟩_nq ⊗ |f⟩_nq
+        - Swap test between two n_q-qubit register pairs
+        
         Qubit layout:
         - q[0]: ancilla for swap test
-        - q[1 : 2*n_qubits+1]: |vec(K)⟩
-        - q[2*n_qubits+1 : 4*n_qubits+1]: |u(θ)⟩ ⊗ |f⟩
+        - q[1 : n_qubits+1]: first n_q qubits of |vec(K)⟩
+        - q[n_qubits+1 : 2*n_qubits+1]: remaining n_q qubits of |vec(K)⟩ (or |0⟩)
+        - q[2*n_qubits+1 : 3*n_qubits+1]: |u(θ)⟩
+        - q[3*n_qubits+1 : 4*n_qubits+1]: |f⟩
         
         Args:
-            vec_K: Normalized vectorized matrix |vec(K)⟩
+            vec_K: Normalized vectorized matrix |vec(K)⟩ (2^n_q dimensional)
             f_norm: Normalized right-hand side vector |f⟩
             u_theta: Pre-computed |u(θ)⟩ state vector
         
@@ -105,30 +112,55 @@ class CircuitBuilder:
         num_qubits = self.num_qubits_numerator
         circ = QuantumCircuit(num_qubits)
         
-        # Calculate qubit ranges
-        vec_K_start = 1
-        vec_K_end = 1 + 2 * self.n_qubits
-        uf_start = vec_K_end
-        uf_end = num_qubits
+        # Calculate qubit ranges according to paper's circuit (a)
+        # |ψ₁⟩ = |vec(K)⟩_nq ⊗ |0⟩_nq
+        vec_K_first_start = 1
+        vec_K_first_end = 1 + self.n_qubits
+        vec_K_second_start = vec_K_first_end
+        vec_K_second_end = 1 + 2 * self.n_qubits
         
-        # Prepare |vec(K)⟩ on qubits [1, 2*n_qubits]
-        vec_K_qubits = list(range(vec_K_start, vec_K_end))
-        circ.initialize(vec_K, vec_K_qubits)
+        # |ψ₂⟩ = |u(θ)⟩_nq ⊗ |f⟩_nq
+        u_theta_start = vec_K_second_end
+        u_theta_end = u_theta_start + self.n_qubits
+        f_start = u_theta_end
+        f_end = num_qubits
         
-        # Form tensor product |u(θ)⟩ ⊗ |f⟩ classically
-        u_theta_f = np.kron(u_theta, f_norm)
+        # Prepare |vec(K)⟩ on first n_q qubits [1, n_qubits]
+        # Note: vec_K is 2^n_q dimensional, so we prepare it on 2*n_qubits
+        # But according to paper, we split it into two n_q-qubit registers
+        vec_K_first_qubits = list(range(vec_K_first_start, vec_K_first_end))
+        vec_K_second_qubits = list(range(vec_K_second_start, vec_K_second_end))
         
-        # Prepare |u(θ)⟩ ⊗ |f⟩ on qubits [2*n_qubits+1, 4*n_qubits]
-        uf_qubits = list(range(uf_start, uf_end))
-        circ.initialize(u_theta_f, uf_qubits)
+        # Prepare |vec(K)⟩ on 2*n_qubits (first n_q qubits + remaining n_q qubits)
+        vec_K_all_qubits = list(range(vec_K_first_start, vec_K_second_end))
+        circ.initialize(vec_K, vec_K_all_qubits)
         
-        # Apply swap test between the two registers
-        circ = apply_swap_test(
-            circ,
-            ancilla=0,
-            reg1_qubits=vec_K_qubits,
-            reg2_qubits=uf_qubits
-        )
+        # Prepare |u(θ)⟩ on qubits [2*n_qubits+1, 3*n_qubits]
+        u_theta_qubits = list(range(u_theta_start, u_theta_end))
+        circ.initialize(u_theta, u_theta_qubits)
+        
+        # Prepare |f⟩ on qubits [3*n_qubits+1, 4*n_qubits]
+        f_qubits = list(range(f_start, f_end))
+        circ.initialize(f_norm, f_qubits)
+        
+        # Apply swap test between two n_q-qubit register pairs simultaneously
+        # According to paper's circuit (a), we use one ancilla for both swap tests
+        # First pair: |vec(K)⟩_first_nq and |u(θ)⟩
+        # Second pair: |vec(K)⟩_second_nq and |f⟩
+        
+        # Hadamard on ancilla to create superposition
+        circ.h(0)
+        
+        # Controlled-SWAP for first pair: |vec(K)⟩_first_nq and |u(θ)⟩
+        for q1, q2 in zip(vec_K_first_qubits, u_theta_qubits):
+            circ.cswap(0, q1, q2)
+        
+        # Controlled-SWAP for second pair: |vec(K)⟩_second_nq and |f⟩
+        for q1, q2 in zip(vec_K_second_qubits, f_qubits):
+            circ.cswap(0, q1, q2)
+        
+        # Final Hadamard on ancilla
+        circ.h(0)
         
         return circ
     
