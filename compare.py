@@ -111,6 +111,8 @@ def collect_dfvqls_results(
         optimizer_method="COBYLA",
         max_iter=1,
         verbose=False,
+        simulator=simulator,
+        shots=shot,
     )
     _, _, (num_circuit, den_circuit) = temp_solver.solve(A_work, b_work)
     depth_num = calculate_qc_depth(num_circuit)
@@ -140,6 +142,8 @@ def collect_dfvqls_results(
         optimizer_method="COBYLA",
         max_iter=max_iter,
         verbose=False,
+        simulator=simulator,
+        shots=shot,
     )
 
     print(f"\nDF-VQLS: Running optimization with max_iter={max_iter}")
@@ -255,7 +259,7 @@ def main() -> None:
         overwrite=True,
     )
 
-    has_noise_list = [False, True]
+    has_noise_list = [True]
     for has_noise in has_noise_list:
         if has_noise:
             service = QiskitRuntimeService()

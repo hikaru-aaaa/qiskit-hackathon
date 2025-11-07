@@ -40,8 +40,10 @@ class DFVQLSSolver:
         optimizer_method: str = "COBYLA",
         max_iter: int = 200,
         random_seed: Optional[int] = None,
-        verbose: bool = True,
+        verbose: bool = False,
         use_parallel: bool = False,  # Enable parallel execution for numerator/denominator circuits
+        simulator: Optional[AerSimulator] = None,
+        shots: Optional[int] = None,
     ):
         """
         Initialize DF-VQLS solver.
@@ -79,7 +81,12 @@ class DFVQLSSolver:
         )
 
         # Create simulator (statevector mode for exact simulation)
-        self.simulator = AerSimulator(method="statevector")
+        if simulator is None:
+            self.simulator = AerSimulator(method="statevector")
+        else:
+            self.simulator = simulator
+
+        self.shots = shots
 
         self.cost_function = CostFunction(
             circuit_builder=self.circuit_builder,
