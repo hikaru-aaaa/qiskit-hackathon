@@ -4,6 +4,9 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation
 from qiskit.quantum_info import Statevector
 from qiskit_aer import Aer
+from qiskit_aer import AerSimulator
+from qiskit_aer.noise import NoiseModel
+from typing import Optional
 
 SHOTS = 8192
 # NOTE: ノイズなし → statevector_simulator。ノイズ付き → qasm_simulatorにしてnoise_modelを指定。
@@ -16,13 +19,14 @@ class LSESolver:
     QSVTと古典的な方法の両方をサポート
     """
 
-    def __init__(self, A, b, kappa=4):
+    def __init__(self, A, b, kappa=4, noise_model: Optional[NoiseModel] = None):
         self.A = np.asarray(A, dtype=complex)
         self.b = np.asarray(b, dtype=complex)
         self.n, self.m = self.A.shape
         self.frobenius_norm = np.linalg.norm(self.A, ord="fro")
         self.A_normalized = self.A / self.frobenius_norm
         self.kappa = kappa
+        self.noise_model = noise_model
 
     def solve_lse_classical(self):
         """
@@ -102,7 +106,14 @@ class LSESolver:
         sys_wires = list(range(n_sys))  # |b⟩ を準備するワイヤ
         n_qubits = qsvt_circuit.num_qubits  # システム全体のqubit数
         sys_qubits = list(range(n_qubits))  # QSVT回路が作用する全ワイヤ
-        backend = Aer.get_backend(SIMULATOR)
+        
+        # Create backend with noise model if provided
+        if self.noise_model is not None:
+            # Use density matrix simulator for noisy simulation
+            backend = AerSimulator(method="density_matrix", noise_model=self.noise_model)
+        else:
+            # Use statevector simulator for noiseless simulation
+            backend = Aer.get_backend(SIMULATOR)
 
         # 全基底状態の数（2^n_qubits）
         n_total_states = 2**n_qubits
@@ -165,8 +176,28 @@ class LSESolver:
             test_circuit.h(aux_qubit)
 
             if statevector:
-                statevector = Statevector.from_instruction(test_circuit)
-                all_probs = statevector.probabilities()
+                if self.noise_model is not None:
+                    # For noisy simulation, use density matrix
+                    transpiled_circuit = transpile(test_circuit, backend)
+                    result = backend.run(transpiled_circuit, shots=8192).result()
+                    # Extract probabilities from density matrix
+                    density_matrix = result.data().get('density_matrix')
+                    if density_matrix is not None:
+                        # Calculate probabilities from density matrix
+                        all_probs = np.real(np.diag(density_matrix))
+                    else:
+                        # Fallback: use counts if density matrix not available
+                        counts = result.get_counts()
+                        total_shots = sum(counts.values())
+                        all_probs = np.zeros(2**(n_qubits + 1))
+                        for bitstring, count in counts.items():
+                            idx = int(bitstring, 2)
+                            all_probs[idx] = count / total_shots
+                else:
+                    # For noiseless simulation, use statevector
+                    sv = Statevector.from_instruction(test_circuit)
+                    all_probs = sv.probabilities()
+                
                 cutoff_index = 2**n_qubits
                 # 補助ビットが 0 の成分の確率
                 p0 = np.sum(all_probs[:cutoff_index])

@@ -9,6 +9,7 @@ from typing import Tuple, Optional
 from scipy.optimize import OptimizeResult
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
+from qiskit_aer.noise import NoiseModel
 
 from .utils import (
     validate_matrix_size,
@@ -42,6 +43,7 @@ class DFVQLSSolver:
         random_seed: Optional[int] = None,
         verbose: bool = True,
         use_parallel: bool = False,  # Enable parallel execution for numerator/denominator circuits
+        noise_model: Optional[NoiseModel] = None,  # Noise model for noisy simulation
     ):
         """
         Initialize DF-VQLS solver.
@@ -54,6 +56,7 @@ class DFVQLSSolver:
             random_seed: Random seed for reproducibility
             verbose: Whether to print progress information
             use_parallel: Whether to run numerator and denominator circuits in parallel
+            noise_model: Optional noise model for noisy simulation (if None, uses noiseless statevector simulation)
 
         Raises:
             ValueError: If matrix_size is not a power of 2
@@ -66,6 +69,7 @@ class DFVQLSSolver:
         self.num_layers = num_layers
         self.verbose = verbose
         self.use_parallel = use_parallel
+        self.noise_model = noise_model
 
         # Initialize components
         self.ansatz = HardwareEfficientAnsatz(
@@ -78,8 +82,18 @@ class DFVQLSSolver:
             matrix_size=matrix_size, ansatz=self.ansatz
         )
 
-        # Create simulator (statevector mode for exact simulation)
-        self.simulator = AerSimulator(method="statevector")
+        # Create simulator (with noise model if provided)
+        if noise_model is not None:
+            # Use qasm_simulator for noisy simulation
+            self.simulator = AerSimulator(
+                method="density_matrix",  # Use density matrix for noisy simulation
+                noise_model=noise_model
+            )
+            if self.verbose:
+                print(f"Using noisy simulation with noise model")
+        else:
+            # Use statevector mode for exact (noiseless) simulation
+            self.simulator = AerSimulator(method="statevector")
 
         self.cost_function = CostFunction(
             circuit_builder=self.circuit_builder,
@@ -240,7 +254,22 @@ class DFVQLSSolver:
         # Run simulation
         transpiled_circ = transpile(circ, self.simulator)
         result = self.simulator.run(transpiled_circ).result()
-        u_theta = np.real(np.array(result.get_statevector(circ)))
+        
+        # Extract statevector (handle both noiseless and noisy cases)
+        if self.noise_model is not None:
+            # For noisy simulation, extract from density matrix
+            density_matrix = result.data().get('density_matrix')
+            if density_matrix is not None:
+                # Extract diagonal elements (probabilities) and take square root
+                probs = np.real(np.diag(density_matrix))
+                # Convert probabilities to amplitudes (with sign from density matrix)
+                u_theta = np.sqrt(probs[:len(probs)//2])  # Take first half for |0⟩ ancilla
+            else:
+                # Fallback: use statevector if available
+                u_theta = np.real(np.array(result.get_statevector(circ)))
+        else:
+            # For noiseless simulation, use statevector directly
+            u_theta = np.real(np.array(result.get_statevector(circ)))
 
         return u_theta
 
