@@ -1,0 +1,29 @@
+{
+  "name": "QSVT",
+  "results": [
+    {
+      "noise_strength": 0.0,
+      "error": 0.0328298827143085
+    },
+    {
+      "noise_strength": 0.02,
+      "error": 1.0
+    },
+    {
+      "noise_strength": 0.04,
+      "error": 1.0
+    },
+    {
+      "noise_strength": 0.06,
+      "error": 1.0000000000000004
+    },
+    {
+      "noise_strength": 0.08,
+      "error": 1.0000000000000004
+    },
+    {
+      "noise_strength": 0.1,
+      "error": 1.0000000000000004
+    }
+  ]
+}

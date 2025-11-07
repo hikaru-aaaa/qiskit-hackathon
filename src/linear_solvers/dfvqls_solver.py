@@ -4,10 +4,11 @@ DF-VQLS Solver implementation
 Decomposition-Free Variational Quantum Linear Solverを提供します。
 """
 
-from typing import Tuple
+from typing import Tuple, Optional
 import numpy as np
 from scipy.optimize import OptimizeResult
 from qiskit import QuantumCircuit
+from qiskit_aer.noise import NoiseModel
 
 from .base import LinearSystemSolver
 from ..vqls.generalized import DFVQLSSolver as GeneralizedDFVQLSSolver
@@ -29,6 +30,7 @@ class DFVQLSSolver(LinearSystemSolver):
         random_seed: int = None,
         verbose: bool = True,
         use_parallel: bool = False,
+        noise_model: Optional[NoiseModel] = None,
     ):
         """
         DF-VQLSソルバーを初期化
@@ -41,6 +43,7 @@ class DFVQLSSolver(LinearSystemSolver):
             random_seed: ランダムシード
             verbose: 詳細出力
             use_parallel: 並列実行
+            noise_model: ノイズモデル（オプション、ノイズ付きシミュレーション用）
         """
         self.solver = GeneralizedDFVQLSSolver(
             matrix_size=matrix_size,
@@ -50,6 +53,7 @@ class DFVQLSSolver(LinearSystemSolver):
             random_seed=random_seed,
             verbose=verbose,
             use_parallel=use_parallel,
+            noise_model=noise_model,
         )
 
     def get_solution_at_params(self, params: np.ndarray, A: np.ndarray, b: np.ndarray) -> np.ndarray:
