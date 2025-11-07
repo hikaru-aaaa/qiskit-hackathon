@@ -131,38 +131,29 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray, title: str, qsvt_depth:
             f"Note: COBYLA converged early at iteration {actual_iterations}/{max_iter}"
         )
 
-    # Extract results at each checkpoint
-    for checkpoint in checkpoint_iters:
-        # Find the iteration closest to the checkpoint (0-indexed)
-        checkpoint_idx = checkpoint - 1
+    # Extract results at EVERY iteration instead of just checkpoints
+    print(f"DF-VQLS: Processing {len(iteration_history)} iterations...")
+    for iter_data in iteration_history:
+        actual_iter = iter_data["iteration"] + 1  # Convert 0-indexed to 1-indexed
 
-        # Handle early convergence: use last available iteration if checkpoint not reached
-        if checkpoint_idx >= len(iteration_history):
-            # COBYLA converged before this checkpoint - use final converged parameters
-            checkpoint_data = iteration_history[-1]
-            actual_iter = checkpoint_data["iteration"] + 1
-            print(
-                f"      Checkpoint {checkpoint}: using converged solution from iter {actual_iter}"
-            )
-        else:
-            checkpoint_data = iteration_history[checkpoint_idx]
-            actual_iter = checkpoint_data["iteration"] + 1
+        # Reconstruct solution from parameters at this iteration
+        iter_params = iter_data["params"]
+        x_iter = dfvqls_solver.get_solution_at_params(iter_params, A, b)
 
-        # Reconstruct solution from parameters at this checkpoint
-        checkpoint_params = checkpoint_data["params"]
-        x_checkpoint = dfvqls_solver.get_solution_at_params(checkpoint_params, A, b)
-
-        # Calculate error at this checkpoint
-        error = np.linalg.norm(x_checkpoint - classical_solution) / np.linalg.norm(
+        # Calculate error at this iteration
+        error = np.linalg.norm(x_iter - classical_solution) / np.linalg.norm(
             classical_solution
         )
 
         # Store result (depth × actual_iteration for fair comparison)
         results.results.append(Result(depth * actual_iter, error))
-        print(
-            f"DF-VQLS: iter={actual_iter}, depth={depth * actual_iter}, "
-            f"error={error:.4f}, cost={checkpoint_data['cost']:.6f}"
-        )
+
+        # Print progress every 50 iterations or at the end
+        if actual_iter % 50 == 0 or actual_iter == len(iteration_history):
+            print(
+                f"  iter={actual_iter}, depth={depth * actual_iter}, "
+                f"error={error:.4f}, cost={iter_data['cost']:.6f}"
+            )
 
     output_dir = "output/depth_matched" if qsvt_depth is not None else "output"
     save_result_list(results, f"{output_dir}/dfvqls_{title}.json")
@@ -172,6 +163,8 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray, title: str, qsvt_depth:
 
 def save_result_list(result_list: ResultList, filename: str) -> None:
     """Save a single ResultList to JSON file."""
+    # Ensure the output directory exists
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
     data = asdict(result_list)
     with open(filename, "w") as f:
         json.dump(data, f, indent=2)
@@ -208,6 +201,8 @@ def draw_result_plot(
     plt.xlabel("Depth")
     plt.ylabel("Error")
     output_dir = "output/depth_matched" if use_depth_matched_dir else "output"
+    # Ensure the output directory exists
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
     plt.savefig(f"{output_dir}/{title}.pdf")
     plt.close()
 
