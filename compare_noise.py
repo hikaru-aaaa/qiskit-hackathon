@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
-from qiskit_aer.noise import NoiseModel, PhaseDampingError
+from qiskit_aer.noise import NoiseModel, phase_damping_error
 
 # Add src/qsvt to Python path for inverse_matrix import
 sys.path.insert(0, str(Path(__file__).parent / "src" / "qsvt"))
@@ -61,8 +61,9 @@ def create_noise_model(phase_damping_rate: float) -> NoiseModel:
         NoiseModel with phase damping error
     """
     noise_model = NoiseModel()
-    phase_damping_error = PhaseDampingError(phase_damping_rate)
-    noise_model.add_all_qubit_quantum_error(phase_damping_error, ['u', 'rx', 'ry', 'rz', 'h', 'cx', 'cz'])
+    # Use phase_damping_error function to create phase damping error
+    error = phase_damping_error(phase_damping_rate)
+    noise_model.add_all_qubit_quantum_error(error, ['u', 'rx', 'ry', 'rz', 'h', 'cx', 'cz'])
     return noise_model
 
 
