@@ -127,6 +127,16 @@ class CostFunction:
 
         return u_theta
 
+    def _compute_u_theta_circuit(self, params: np.ndarray) -> QuantumCircuit:
+        """
+        Build the ansatz circuit |u(θ)⟩ with parameters bound.
+        """
+        temp_circ = QuantumCircuit(self.n_qubits)
+        qubits = list(range(self.n_qubits))
+        temp_circ = self.ansatz.apply(temp_circ, qubits, params)
+        temp_circ.name = "U(θ)"
+        return temp_circ
+
     def _initialize_parallel_resources(self, num_workers: int = 2):
         """Initialize parallel execution resources (simulators and executor).
 
@@ -193,6 +203,33 @@ class CostFunction:
 
         return ordered_results
 
+    def extract_P0_from_measurement(self, circuit: QuantumCircuit) -> float:
+        """
+        Extract probability of measuring ancilla in |0⟩ state from measurement counts.
+
+        Args:
+            circuit: Quantum circuit with measurements
+
+        Returns:
+            Probability P(0) of measuring ancilla in |0⟩ state
+        """
+        num_qubits = circuit.num_qubits
+        measured_circ = QuantumCircuit(num_qubits, 1)  # 1 classical bit
+        measured_circ.compose(circuit, inplace=True)  # Copy gates from original
+        measured_circ.measure(0, 0)  # Measure ancilla qubit
+
+        # Run with shots
+        transpiled = transpile(measured_circ, self.simulator)
+        result = self.simulator.run(transpiled, shots=self.shots).result()
+        counts = result.get_counts()
+
+        # Extract P(0) - counts format: {'0': n0, '1': n1}
+        count_0 = counts.get("0", 0)
+        total_shots = sum(counts.values())
+        P0 = count_0 / total_shots
+
+        return P0
+
     def compute(
         self,
         params: np.ndarray,
@@ -236,64 +273,52 @@ class CostFunction:
         if phase_pbar:
             phase_pbar.update(1)
 
-        # Phase 2: Compute |u(θ)⟩
-        if phase_pbar:
-            phase_pbar.set_description("Phase 2/6: Computing |u(θ)⟩")
-        u_theta = self._compute_u_theta(params)
-        if phase_pbar:
-            phase_pbar.update(1)
-
-        # Phase 3: Build circuits
-        if phase_pbar:
-            phase_pbar.set_description("Phase 3/6: Building circuits")
-        circ_num = self.circuit_builder.build_numerator_circuit(vec_K, f_norm, u_theta)
-
-        circ_den = self.circuit_builder.build_denominator_circuit(
-            vec_K, vec_KT, u_theta
-        )
-        if phase_pbar:
-            phase_pbar.update(1)
-
         if self.shots is None:
             # === STATEVECTOR (NOISELESS) PATH ===
+            # Phase 2: Compute |u(θ)⟩ as statevector
+            if phase_pbar:
+                phase_pbar.set_description("Phase 2/6: Computing |u(θ)⟩ (fast)")
+            u_theta_array = self._compute_u_theta(params)  # <-- Use fast array func
+            if phase_pbar:
+                phase_pbar.update(1)
 
-            # Add statevector commands
+            # Phase 3: Build circuits (using initialize)
+            if phase_pbar:
+                phase_pbar.set_description("Phase 3/6: Building circuits (fast)")
+            circ_num = self.circuit_builder.build_numerator_circuit(
+                vec_K, f_norm, u_theta_array
+            )
+            circ_den = self.circuit_builder.build_denominator_circuit(
+                vec_K, vec_KT, u_theta_array
+            )
             circ_num.save_statevector()
             circ_den.save_statevector()
+            if phase_pbar:
+                phase_pbar.update(1)
 
             # Phase 4: Run circuits (parallel or sequential)
             if phase_pbar:
                 phase_pbar.set_description("Phase 4/6: Running circuits (Statevector)")
 
-            if use_parallel:
-                # (Your existing parallel statevector logic)
-                if self._parallel_simulators is None:
-                    self._initialize_parallel_resources(num_workers=2)
-                sv_num, sv_den = self._run_circuit_parallel([circ_num, circ_den])
-                if phase_pbar:
-                    phase_pbar.update(2)  # Skip phase 5
-            else:
-                # Phase 4: Run numerator circuit (sequential)
-                if phase_pbar:
-                    phase_pbar.set_description(
-                        "Phase 4/6: Running numerator (Statevector)"
-                    )
-                transpiled_num = transpile(circ_num, self.simulator)
-                result_num = self.simulator.run(transpiled_num).result()
-                sv_num = np.asarray(result_num.get_statevector(circ_num))
-                if phase_pbar:
-                    phase_pbar.update(1)
+            # Phase 4: Run numerator circuit (sequential)
+            if phase_pbar:
+                phase_pbar.set_description("phase 4/6: running numerator (statevector)")
+            transpiled_num = transpile(circ_num, self.simulator)
+            result_num = self.simulator.run(transpiled_num).result()
+            sv_num = np.asarray(result_num.get_statevector(circ_num))
+            if phase_pbar:
+                phase_pbar.update(1)
 
-                # Phase 5: Run denominator circuit
-                if phase_pbar:
-                    phase_pbar.set_description(
-                        "Phase 5/6: Running denominator (Statevector)"
-                    )
-                transpiled_den = transpile(circ_den, self.simulator)
-                result_den = self.simulator.run(transpiled_den).result()
-                sv_den = np.asarray(result_den.get_statevector(circ_den))
-                if phase_pbar:
-                    phase_pbar.update(1)
+            # phase 5: run denominator circuit
+            if phase_pbar:
+                phase_pbar.set_description(
+                    "phase 5/6: running denominator (statevector)"
+                )
+            transpiled_den = transpile(circ_den, self.simulator)
+            result_den = self.simulator.run(transpiled_den).result()
+            sv_den = np.asarray(result_den.get_statevector(circ_den))
+            if phase_pbar:
+                phase_pbar.update(1)
 
             # Phase 6a: Compute P(0) from statevectors
             if phase_pbar:
@@ -304,72 +329,43 @@ class CostFunction:
         else:
             # === SHOT-BASED (NOISY) PATH ===
 
-            # Note: This path is sequential. Parallel execution for shots
-            # would require a different parallel-running function.
-            # The `use_parallel` flag is ignored here.
+            # Phase 2: Build |u(θ)⟩ circuit
+            if phase_pbar:
+                phase_pbar.set_description("Phase 2/6: Building |u(θ)⟩ circuit")
+            u_theta_circuit = self._compute_u_theta_circuit(
+                params
+            )  # <-- Use circuit func
+            if phase_pbar:
+                phase_pbar.update(1)
 
-            # Phase 4: Run numerator circuit (with shots)
+            # Phase 3: Build circuits (using StatePreparation)
+            if phase_pbar:
+                phase_pbar.set_description("Phase 3/6: Building circuits (quantum)")
+            circ_num = self.circuit_builder.build_numerator_circuit_quantum(
+                vec_K, f_norm, u_theta_circuit
+            )
+            circ_den = self.circuit_builder.build_denominator_circuit_quantum(
+                vec_K, vec_KT, u_theta_circuit
+            )
+            if phase_pbar:
+                phase_pbar.update(1)
+
+            # Phase 4/5: Run circuits on NOISY simulator (self.simulator)
             if phase_pbar:
                 phase_pbar.set_description("Phase 4/6: Running numerator (Shots)")
-
-            # Using ancilla_qubit_index=0 based on your CircuitBuilder
-            P0_num = self.extract_P0_from_measurement(circ_num, ancilla_qubit_index=0)
-
+            P0_num = self.extract_P0_from_measurement(circ_num)
             if phase_pbar:
                 phase_pbar.update(1)
 
-            # Phase 5: Run denominator circuit (with shots)
             if phase_pbar:
                 phase_pbar.set_description("Phase 5/6: Running denominator (Shots)")
-
-            P0_den = self.extract_P0_from_measurement(circ_den, ancilla_qubit_index=0)
-
+            P0_den = self.extract_P0_from_measurement(circ_den)
             if phase_pbar:
                 phase_pbar.update(1)
 
-            # Phase 6a: P(0) values are already computed
+            # Phase 6a: P(0) values are already from counts
             if phase_pbar:
                 phase_pbar.set_description("Phase 6/6: Computing cost")
-            # P0_num and P0_den are already set
-
-        # Phase 4: Run circuits (parallel or sequential)
-        if phase_pbar:
-            phase_pbar.set_description("Phase 4/6: Running circuits")
-        if use_parallel:
-            # Initialize parallel resources if needed (first time only)
-            if self._parallel_simulators is None:
-                self._initialize_parallel_resources(num_workers=2)
-            # Run numerator and denominator circuits in parallel
-            sv_num, sv_den = self._run_circuit_parallel([circ_num, circ_den])
-            if phase_pbar:
-                phase_pbar.update(2)  # Skip phase 5 (both circuits done in parallel)
-        else:
-            # Phase 4: Run numerator circuit (sequential)
-            if phase_pbar:
-                phase_pbar.set_description("Phase 4/6: Running numerator circuit")
-            # Sequential execution
-            transpiled_num = transpile(circ_num, self.simulator)
-            result_num = self.simulator.run(transpiled_num).result()
-            sv_num = np.asarray(result_num.get_statevector(circ_num))
-            if phase_pbar:
-                phase_pbar.update(1)
-
-            # Phase 5: Run denominator circuit
-            if phase_pbar:
-                phase_pbar.set_description("Phase 5/6: Running denominator circuit")
-            transpiled_den = transpile(circ_den, self.simulator)
-            result_den = self.simulator.run(transpiled_den).result()
-            sv_den = np.asarray(result_den.get_statevector(circ_den))
-            if phase_pbar:
-                phase_pbar.update(1)
-
-            # Phase 6: Compute cost
-            if phase_pbar:
-                phase_pbar.set_description("Phase 6/6: Computing cost")
-
-        # Extract P(0) from statevectors
-        P0_num = extract_P0_from_statevector(sv_num)
-        P0_den = extract_P0_from_statevector(sv_den)
 
         # Calculate inner product squared: |⟨ψ₁|ψ₂⟩|² = 2P(0) - 1
         inner_product_squared_num = abs(2 * P0_num - 1)

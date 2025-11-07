@@ -260,7 +260,7 @@ def main() -> None:
         overwrite=True,
     )
 
-    has_noise_list = [False, True]
+    has_noise_list = [True]
     for has_noise in has_noise_list:
         if has_noise:
             service = QiskitRuntimeService()
