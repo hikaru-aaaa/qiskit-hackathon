@@ -135,7 +135,7 @@ def test_dfvqls_8x8(
     solver = DFVQLSSolver(
         matrix_size=8,
         num_layers=num_layers,
-        optimizer_method="COBYLA",
+        optimizer_method="BFGS",
         max_iter=max_iter,
         random_seed=random_seed,
         verbose=False,  # コールバックで表示するため、solverのverboseはFalseに
