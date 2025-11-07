@@ -3,6 +3,7 @@ from .inverse_matrix import compute_matrix_inverse_qsvt, generate_angles_qsvt_an
 from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation
 from qiskit.quantum_info import Statevector
+from qiskit.exceptions import QiskitError
 from qiskit_aer import Aer
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
@@ -178,21 +179,24 @@ class LSESolver:
             if statevector:
                 if self.noise_model is not None:
                     # For noisy simulation, use density matrix
+                    # Save density matrix to extract probabilities
+                    test_circuit.save_density_matrix()
                     transpiled_circuit = transpile(test_circuit, backend)
                     result = backend.run(transpiled_circuit, shots=8192).result()
+                    
                     # Extract probabilities from density matrix
-                    density_matrix = result.data().get('density_matrix')
-                    if density_matrix is not None:
-                        # Calculate probabilities from density matrix
-                        all_probs = np.real(np.diag(density_matrix))
-                    else:
-                        # Fallback: use counts if density matrix not available
-                        counts = result.get_counts()
-                        total_shots = sum(counts.values())
-                        all_probs = np.zeros(2**(n_qubits + 1))
-                        for bitstring, count in counts.items():
-                            idx = int(bitstring, 2)
-                            all_probs[idx] = count / total_shots
+                    try:
+                        density_matrix = result.data().get('density_matrix')
+                        if density_matrix is not None:
+                            # Calculate probabilities from density matrix diagonal
+                            all_probs = np.real(np.diag(density_matrix))
+                        else:
+                            # Fallback: try to get statevector if available
+                            sv = result.get_statevector(test_circuit)
+                            all_probs = np.abs(sv) ** 2
+                    except Exception as e:
+                        # If density matrix extraction fails, raise informative error
+                        raise QiskitError(f"Could not extract probabilities from noisy simulation result: {e}")
                 else:
                     # For noiseless simulation, use statevector
                     sv = Statevector.from_instruction(test_circuit)

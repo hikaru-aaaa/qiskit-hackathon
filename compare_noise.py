@@ -62,8 +62,46 @@ def create_noise_model(phase_damping_rate: float) -> NoiseModel:
     """
     noise_model = NoiseModel()
     # Use phase_damping_error function to create phase damping error
-    error = phase_damping_error(phase_damping_rate)
-    noise_model.add_all_qubit_quantum_error(error, ['u', 'rx', 'ry', 'rz', 'h', 'cx', 'cz'])
+    error_1q = phase_damping_error(phase_damping_rate)
+    
+    # Apply 1-qubit error to single-qubit gates
+    noise_model.add_all_qubit_quantum_error(error_1q, ['u', 'rx', 'ry', 'rz', 'h'])
+    
+    # For 2-qubit gates (cx, cz), we need to create a 2-qubit error
+    # that applies phase damping independently to each qubit
+    # Phase damping Kraus operators for 1 qubit:
+    # K0 = [[1, 0], [0, sqrt(1-γ)]]
+    # K1 = [[0, 0], [0, sqrt(γ)]]
+    # For 2 qubits independently: K_i ⊗ K_j for all i, j
+    
+    from qiskit_aer.noise import QuantumError
+    from qiskit.quantum_info import Kraus
+    import numpy as np
+    
+    # Calculate 1-qubit Kraus operators directly
+    gamma = phase_damping_rate
+    sqrt_1_gamma = np.sqrt(1 - gamma)
+    sqrt_gamma = np.sqrt(gamma)
+    
+    K0_1q = np.array([[1.0, 0.0], [0.0, sqrt_1_gamma]], dtype=complex)
+    K1_1q = np.array([[0.0, 0.0], [0.0, sqrt_gamma]], dtype=complex)
+    
+    # Create 2-qubit Kraus operators by tensor product
+    # For independent phase damping: K_i ⊗ K_j for i, j in {0, 1}
+    kraus_2q_list = [
+        np.kron(K0_1q, K0_1q),  # K0 ⊗ K0
+        np.kron(K0_1q, K1_1q),  # K0 ⊗ K1
+        np.kron(K1_1q, K0_1q),  # K1 ⊗ K0
+        np.kron(K1_1q, K1_1q),  # K1 ⊗ K1
+    ]
+    
+    # Create 2-qubit quantum error from Kraus operators
+    kraus_2q = Kraus(kraus_2q_list)
+    error_2q = QuantumError(kraus_2q)
+    
+    # Apply 2-qubit error to 2-qubit gates
+    noise_model.add_all_qubit_quantum_error(error_2q, ['cx', 'cz'])
+    
     return noise_model
 
 
