@@ -237,3 +237,189 @@ qc.initialize(vec_K_normalized, qubits)
 - 問題特化型の状態準備回路の設計
 - 近似的状態準備手法の検討
 - 実量子デバイスでの小規模実証
+
+---
+
+# 反復追跡機能 (Iteration Tracking) - 2025-11-07追加
+
+## 概要
+
+DF-VQLSソルバーに**反復追跡機能**を実装しました。これにより、最適化の各反復における:
+- パラメータ値 `θ`
+- コスト関数値
+- 解ベクトル（パラメータから再構築可能）
+
+を記録・解析できるようになりました。
+
+## 使用方法
+
+### 基本的な使い方
+
+```python
+from src.linear_solvers import DFVQLSSolver
+import numpy as np
+
+# ソルバー作成
+solver = DFVQLSSolver(
+    matrix_size=4,
+    num_layers=2,
+    max_iter=100
+)
+
+# 反復追跡を有効にして解く
+A = np.array([[2, -1, 0, 0],
+              [-1, 2, -1, 0],
+              [0, -1, 2, -1],
+              [0, 0, -1, 2]])
+b = np.array([1, 0, 0, 1])
+
+x_solution, metadata, circuits = solver.solve(A, b, track_iterations=True)
+
+# 反復履歴にアクセス
+history = metadata['iteration_history']
+for entry in history:
+    print(f"Iter {entry['iteration']}: cost={entry['cost']:.6f}")
+```
+
+### 任意の反復での解を再構築
+
+```python
+# 50回目の反復での解を取得
+params_at_50 = history[49]['params']  # 0-indexed
+x_at_50 = solver.get_solution_at_params(params_at_50, A, b)
+
+# 誤差計算
+classical_sol = np.linalg.solve(A, b)
+error_at_50 = np.linalg.norm(x_at_50 - classical_sol) / np.linalg.norm(classical_sol)
+print(f"Error at iteration 50: {error_at_50:.6f}")
+```
+
+### 完全な収束曲線のプロット
+
+```python
+import matplotlib.pyplot as plt
+
+# 全反復での誤差を計算
+errors = []
+classical_sol = np.linalg.solve(A, b)
+
+for entry in history:
+    x_iter = solver.get_solution_at_params(entry['params'], A, b)
+    error = np.linalg.norm(x_iter - classical_sol) / np.linalg.norm(classical_sol)
+    errors.append(error)
+
+# プロット
+plt.figure(figsize=(10, 6))
+plt.semilogy(errors)  # 対数スケール
+plt.xlabel('Iteration')
+plt.ylabel('Relative Error')
+plt.title('DF-VQLS Convergence')
+plt.grid(True)
+plt.show()
+```
+
+## 性能最適化: `compare.py`での活用
+
+従来の`compare.py`は異なる`max_iter`値で**5回の独立した最適化**を実行していましたが、反復追跡により**1回の実行で全チェックポイントのデータ**を取得できるようになりました。
+
+**改善前**:
+```python
+# 5回の独立した実行 (合計1500反復)
+for max_iter in [100, 200, 300, 400, 500]:
+    solver = DFVQLSSolver(max_iter=max_iter)
+    x, metadata, circuits = solver.solve(A, b)
+    # 結果を記録
+```
+
+**改善後**:
+```python
+# 1回の実行で全チェックポイントを取得 (合計500反復)
+solver = DFVQLSSolver(max_iter=500)
+x, metadata, circuits = solver.solve(A, b, track_iterations=True)
+
+for checkpoint in [100, 200, 300, 400, 500]:
+    params = metadata['iteration_history'][checkpoint-1]['params']
+    x_checkpoint = solver.get_solution_at_params(params, A, b)
+    # 各チェックポイントでの結果を記録
+```
+
+**性能向上**: 約**3倍高速化** (1500反復 → 500反復)
+
+## 重要な制約: シミュレーション専用機能
+
+⚠️ **この機能は statevector シミュレーション専用です**
+
+### なぜシミュレーション専用なのか
+
+`get_solution_at_params()`は以下のプロセスで解を再構築します:
+
+1. パラメータ`θ`でアンザッツ回路を構築
+2. **statevector simulation**を実行して`|u(θ)⟩`を取得
+3. 完全な量子状態ベクトルから解を抽出
+4. スケーリングを適用
+
+### 実量子デバイスでの課題
+
+実量子コンピュータでは:
+
+| 項目 | シミュレータ | 実量子デバイス |
+|------|--------------|----------------|
+| 状態アクセス | 直接アクセス可能 | **不可能** (測定のみ) |
+| 1反復あたりのコスト | O(1) | **O(shots)** (数千〜数万ショット必要) |
+| 全反復での再構築 | 高速 (ms) | **非現実的** (数時間〜数日) |
+| ノイズ | なし | **測定誤差、ゲート誤差** |
+
+**具体例**:
+- 100反復 × 1000ショット/反復 = 100,000回の回路実行
+- 実量子デバイスでは非常に高コスト
+- キューイング時間を含めると数時間〜数日
+
+### 実量子デバイスでの代替アプローチ
+
+実量子デバイスで収束を追跡するには:
+
+1. **コスト関数値のみ記録** (既に実行済み)
+   - 各反復でコスト値は計算済み
+   - 解の再構築は不要
+
+2. **選択的チェックポイント**
+   - 最終解のみ、または数個のチェックポイントのみ測定
+   - 全反復ではなく重要な点のみ
+
+3. **測定ベース手法**
+   - Tomography（完全な状態再構築、O(4^n)測定）
+   - Shadow tomography（効率的な近似、O(n)測定）
+
+## 活用シナリオ
+
+### ✅ 適切な使用例
+
+- **アルゴリズム研究**: 収束特性の解析
+- **ベンチマーク**: 異なる手法の比較
+- **デバッグ**: 最適化の振る舞いの理解
+- **教育**: VQAの学習・可視化
+
+### ❌ 不適切な使用例
+
+- 実量子デバイスでの全反復追跡（コストが高すぎる）
+- 大規模システム（状態ベクトルのメモリ制約）
+- 本番環境での使用（シミュレーション専用）
+
+## メモリ使用量
+
+反復履歴のメモリオーバーヘッド（目安）:
+
+- 2×2システム、500反復: ~50KB
+- 4×4システム、500反復: ~100KB
+- 8×8システム、500反復: ~200KB
+
+アンザッツパラメータとコスト値のみ保存するため、メモリオーバーヘッドは最小限です。
+
+## まとめ
+
+反復追跡機能は**シミュレーション研究のための強力なツール**ですが、実量子デバイスでは使用できません。この制約は量子状態の測定原理（状態の読み出しは測定を通じてのみ可能）に由来する根本的なものです。
+
+実量子デバイスでの実験では:
+- コスト関数の収束曲線のみを追跡
+- 最終解の精度評価に焦点を当てる
+- 反復ごとの詳細解析は避ける
