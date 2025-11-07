@@ -172,6 +172,8 @@ def collect_dfvqls_results(A: np.ndarray, b: np.ndarray, title: str, qsvt_depth:
 
 def save_result_list(result_list: ResultList, filename: str) -> None:
     """Save a single ResultList to JSON file."""
+    # Ensure the output directory exists
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
     data = asdict(result_list)
     with open(filename, "w") as f:
         json.dump(data, f, indent=2)
@@ -208,6 +210,8 @@ def draw_result_plot(
     plt.xlabel("Depth")
     plt.ylabel("Error")
     output_dir = "output/depth_matched" if use_depth_matched_dir else "output"
+    # Ensure the output directory exists
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
     plt.savefig(f"{output_dir}/{title}.pdf")
     plt.close()
 
