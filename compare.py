@@ -92,7 +92,7 @@ def collect_dfvqls_results(
     print("DF-VQLS: Calculating per-iteration circuit depth...")
     temp_solver = DFVQLSSolver(
         matrix_size=len(A),
-        num_layers=2,
+        num_layers=3,  # test_dfvqls_8x8.pyと同じに
         optimizer_method=optimizer_method,
         max_iter=1,
         verbose=False,
@@ -126,7 +126,7 @@ def collect_dfvqls_results(
     # Run main optimization with iteration tracking enabled
     dfvqls_solver = DFVQLSSolver(
         matrix_size=len(A),
-        num_layers=2,
+        num_layers=3,  # test_dfvqls_8x8.pyと同じに
         optimizer_method=optimizer_method,
         max_iter=max_iter,
         verbose=False,
@@ -134,8 +134,13 @@ def collect_dfvqls_results(
 
     print(f"\nDF-VQLS: Running optimization with max_iter={max_iter}")
     print(f"  Optimizer: {optimizer_method}")
+    
+    # ランダム初期化を使用（test_dfvqls_8x8.pyと同じに）
+    num_params = dfvqls_solver.solver.ansatz.num_parameters()
+    initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+    
     x_solution, metadata, (num_circuit, den_circuit) = dfvqls_solver.solve(
-        A_work, b_work, track_iterations=True
+        A_work, b_work, initial_params=initial_params, track_iterations=True
     )
 
     depth = per_iter_depth  # Use pre-calculated depth
