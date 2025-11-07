@@ -59,7 +59,7 @@ def collect_qsvt_results(
         )
         results.results.append(Result(depth, error))
 
-    output_dir = "output/depth_matched" if use_depth_matched_dir else "output"
+    output_dir = "output/deterministic" if use_depth_matched_dir else "output"
     save_result_list(results, f"{output_dir}/qsvt_{title}.json")
     return results
 
@@ -179,7 +179,7 @@ def collect_dfvqls_results(
                 f"error={error:.4f}, cost={iter_data['cost']:.6f}"
             )
 
-    output_dir = "output/depth_matched" if qsvt_depth is not None else "output"
+    output_dir = "output/deterministic" if qsvt_depth is not None else "output"
     save_result_list(results, f"{output_dir}/dfvqls_{title}.json")
     print(f"\nTotal optimization completed in {actual_iterations} iterations")
     return results
@@ -227,7 +227,7 @@ def draw_result_plot(
     plt.title(title)
     plt.xlabel("Depth")
     plt.ylabel("Error")
-    output_dir = "output/depth_matched" if use_depth_matched_dir else "output"
+    output_dir = "output/deterministic" if use_depth_matched_dir else "output"
     # Ensure the output directory exists
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     plt.savefig(f"{output_dir}/{title}.pdf")
