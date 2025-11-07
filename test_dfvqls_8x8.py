@@ -78,6 +78,7 @@ def test_dfvqls_8x8(
     random_seed: int = 42,
     verbose: bool = True,
     use_parallel: bool = False,
+    use_random_init: bool = False,  # ランダム初期化を使用するか
 ):
     """
     8×8行列に対してDF-VQLSをテストする
@@ -137,13 +138,129 @@ def test_dfvqls_8x8(
         optimizer_method="COBYLA",
         max_iter=max_iter,
         random_seed=random_seed,
-        verbose=verbose,
+        verbose=False,  # コールバックで表示するため、solverのverboseはFalseに
         use_parallel=use_parallel,
     )
     
-    x_quantum, result, (num_circuit, den_circuit) = solver.solve(A, b)
+    # 初期パラメータの設定
+    num_params = solver.ansatz.num_parameters()
+    if use_random_init:
+        # ランダム初期化
+        if random_seed is not None:
+            np.random.seed(random_seed)
+        initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+        if verbose:
+            print(f"ランダム初期化を使用 (パラメータ数: {num_params})")
+    else:
+        # ゼロ初期化
+        initial_params = None
+        if verbose:
+            print("ゼロ初期化を使用")
+    
+    # リアルタイム表示用の変数
+    iteration_count = [0]
+    error_history = []
+    
+    # ヘッダーを表示
+    if verbose:
+        print("\n" + "=" * 80)
+        print("イテレーションごとのCG（コスト）と相対誤差（リアルタイム表示）:")
+        print("=" * 80)
+        print(f"{'反復':<8} {'CG（コスト）':<18} {'相対誤差':<18}")
+        print("-" * 50)
+    
+    # コスト関数をラップして、リアルタイムでCGと相対誤差を表示
+    original_solve = solver.solve
+    
+    def solve_with_realtime_display(K, f, initial_params=None, track_iterations=True):
+        # 元のsolveメソッド内のcost_fnをラップ
+        original_cost_fn = solver.cost_function.compute
+        
+        # 停滞検出用の変数
+        stagnation_window = 10  # 停滞判定のウィンドウサイズ
+        min_improvement = 1e-6  # 最小改善量
+        
+        def cost_fn_with_callback(params, K_inner, f_inner, pbar=None, use_parallel=False, phase_pbar=None):
+            # 元のコスト関数を呼び出し
+            cost = original_cost_fn(params, K_inner, f_inner, pbar=pbar, use_parallel=use_parallel, phase_pbar=phase_pbar)
+            
+            # リアルタイムで相対誤差を計算して表示
+            try:
+                x_iter = solver.get_solution_at_params(params, K_inner, f_inner)
+                error_iter = np.linalg.norm(x_iter - x_classical) / np.linalg.norm(x_classical)
+                
+                iteration_count[0] += 1
+                iter_num = iteration_count[0]
+                
+                error_history.append({
+                    'iteration': iter_num - 1,  # 0-indexed
+                    'error': error_iter,
+                    'cost': cost
+                })
+                
+                # 停滞検出
+                if len(error_history) >= stagnation_window:
+                    recent_costs = [h['cost'] for h in error_history[-stagnation_window:]]
+                    
+                    cost_improvement = min(recent_costs) - max(recent_costs)
+                    
+                    # CGが0.5付近で停滞している場合の警告
+                    if abs(cost - 0.5) < 0.01 and abs(cost_improvement) < min_improvement:
+                        if verbose and iter_num % 20 == 0:  # 20回ごとに警告
+                            print(f"  ⚠️  反復 {iter_num}: CGが0.5付近で停滞しています (CG={cost:.6e}, 相対誤差={error_iter:.6e})")
+                            print(f"     局所解に落ちている可能性があります。ランダム初期化を試すことをお勧めします。")
+                
+                # リアルタイムで表示
+                if verbose:
+                    print(f"反復 {iter_num:3d}: CG = {cost:.6e}, 相対誤差 = {error_iter:.6e}")
+            except Exception as e:
+                # エラーが発生しても最適化は続行
+                if verbose:
+                    print(f"  反復 {iteration_count[0]} での相対誤差計算に失敗: {e}")
+            
+            return cost
+        
+        # コスト関数を一時的に置き換え
+        solver.cost_function.compute = cost_fn_with_callback
+        
+        try:
+            # 元のsolveメソッドを呼び出し
+            result = original_solve(K, f, initial_params=initial_params, track_iterations=track_iterations)
+            return result
+        finally:
+            # 元のコスト関数を復元
+            solver.cost_function.compute = original_cost_fn
+    
+    # track_iterations=Trueで反復履歴を記録
+    x_quantum, result, (num_circuit, den_circuit) = solve_with_realtime_display(
+        A, b, initial_params=initial_params, track_iterations=True
+    )
     
     elapsed_time = time.time() - start_time
+    
+    # リアルタイムで記録したerror_historyをそのまま使用
+    # もしerror_historyが空の場合は、iteration_historyから計算
+    if not error_history and hasattr(result, 'iteration_history') and result.iteration_history:
+        if verbose:
+            print("\n" + "-" * 80)
+            print("イテレーションごとのCG（コスト）と相対誤差を計算中...")
+            print("-" * 80)
+        
+        for i, iter_data in enumerate(result.iteration_history):
+            try:
+                # 各反復のパラメータから解を再構成
+                x_iter = solver.get_solution_at_params(iter_data['params'], A, b)
+                # 相対誤差を計算
+                error_iter = np.linalg.norm(x_iter - x_classical) / np.linalg.norm(x_classical)
+                error_history.append({
+                    'iteration': iter_data['iteration'],
+                    'error': error_iter,
+                    'cost': iter_data['cost']
+                })
+            except Exception as e:
+                if verbose:
+                    print(f"  反復 {iter_data['iteration']} での解の再構成に失敗: {e}")
+                continue
     
     # 結果を表示
     print("\n" + "-" * 80)
@@ -162,6 +279,14 @@ def test_dfvqls_8x8(
     print(f"反復回数: {result.nfev}")
     print(f"最終コスト: {result.fun:.6e}")
     print(f"成功: {result.success}")
+    
+    # 局所解の警告
+    if result.fun > 0.1:
+        print(f"\n⚠️  警告: 最終コストが高いです (CG = {result.fun:.6e})")
+        print("   局所解に落ちている可能性があります。以下の対策を試してください:")
+        print("   - ランダム初期化を使用: --random-init")
+        print("   - より多くの層を使用: --layers 4")
+        print("   - より多くの反復: --max-iter 300")
     
     # 回路の深さを計算（オプション）
     if verbose:
@@ -197,6 +322,7 @@ def test_dfvqls_8x8(
         "iterations": result.nfev,
         "cost": result.fun,
         "success": result.success,
+        "error_history": error_history,  # 相対誤差の変遷を追加
     }
 
 
@@ -238,7 +364,11 @@ if __name__ == "__main__":
         action="store_true",
         help="並列実行を有効化",
     )
-    
+    parser.add_argument(
+        "--random-init",
+        action="store_true",
+        help="ランダム初期化を使用（デフォルト: ゼロ初期化）",
+    )
     args = parser.parse_args()
     
     # kappaが指定されていない場合は1~4までループ
@@ -267,6 +397,7 @@ if __name__ == "__main__":
                 random_seed=args.seed,
                 verbose=not args.quiet,
                 use_parallel=args.parallel,
+                use_random_init=args.random_init,
             )
             
             kappa_elapsed_time = time.time() - kappa_start_time
@@ -323,5 +454,6 @@ if __name__ == "__main__":
             random_seed=args.seed,
             verbose=not args.quiet,
             use_parallel=args.parallel,
+            use_random_init=args.random_init,
         )
 
