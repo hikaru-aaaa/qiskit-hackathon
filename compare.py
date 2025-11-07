@@ -55,39 +55,77 @@ def collect_qsvt_results(A: np.ndarray, b: np.ndarray, title: str) -> ResultList
 
 
 def collect_dfvqls_results(A: np.ndarray, b: np.ndarray, title: str) -> ResultList:
-    max_iter_num = [100, 200, 300, 400, 500]
+    checkpoint_iters = [100, 200, 300, 400, 500]
+    max_iter = max(checkpoint_iters)
     results = ResultList(name="DF-VQLS", results=[])
 
-    for max_iter in max_iter_num:
-        # Create DF-VQLS solver with varying num_layers
-        dfvqls_solver = DFVQLSSolver(
-            matrix_size=len(A),
-            num_layers=2,
-            optimizer_method="COBYLA",
-            max_iter=max_iter,
-            verbose=False,
+    # Single optimization run with iteration tracking enabled
+    dfvqls_solver = DFVQLSSolver(
+        matrix_size=len(A),
+        num_layers=2,
+        optimizer_method="COBYLA",
+        max_iter=max_iter,
+        verbose=False,
+    )
+
+    print(f"DF-VQLS: Running single optimization with max_iter={max_iter}")
+
+    x_solution, metadata, (num_circuit, den_circuit) = dfvqls_solver.solve(
+        A, b, track_iterations=True
+    )
+
+    depth_num = calculate_qc_depth(num_circuit)
+    depth_den = calculate_qc_depth(den_circuit)
+    depth = max(depth_num, depth_den)
+
+    # Get classical solution for error calculation
+    classical_solution = np.linalg.solve(A, b)
+
+    # Extract iteration history
+    iteration_history = metadata.get("iteration_history", [])
+
+    # Check if COBYLA converged early
+    actual_iterations = len(iteration_history)
+    if actual_iterations < max_iter:
+        print(
+            f"Note: COBYLA converged early at iteration {actual_iterations}/{max_iter}"
         )
 
-        # Solve and get circuits
-        x_solution, metadata, (num_circuit, den_circuit) = dfvqls_solver.solve(A, b)
+    # Extract results at each checkpoint
+    for checkpoint in checkpoint_iters:
+        # Find the iteration closest to the checkpoint (0-indexed)
+        checkpoint_idx = checkpoint - 1
 
-        # Calculate max depth (critical path for parallel execution)
-        depth_num = calculate_qc_depth(num_circuit)
-        depth_den = calculate_qc_depth(den_circuit)
-        depth = max(depth_num, depth_den)
+        # Handle early convergence: use last available iteration if checkpoint not reached
+        if checkpoint_idx >= len(iteration_history):
+            # COBYLA converged before this checkpoint - use final converged parameters
+            checkpoint_data = iteration_history[-1]
+            actual_iter = checkpoint_data["iteration"] + 1
+            print(
+                f"      Checkpoint {checkpoint}: using converged solution from iter {actual_iter}"
+            )
+        else:
+            checkpoint_data = iteration_history[checkpoint_idx]
+            actual_iter = checkpoint_data["iteration"] + 1
 
-        # Calculate error
-        classical_solution = np.linalg.solve(A, b)
-        error = np.linalg.norm(x_solution - classical_solution) / np.linalg.norm(
+        # Reconstruct solution from parameters at this checkpoint
+        checkpoint_params = checkpoint_data["params"]
+        x_checkpoint = dfvqls_solver.get_solution_at_params(checkpoint_params, A, b)
+
+        # Calculate error at this checkpoint
+        error = np.linalg.norm(x_checkpoint - classical_solution) / np.linalg.norm(
             classical_solution
         )
 
-        results.results.append(Result(depth * max_iter, error))
+        # Store result (depth × actual_iteration for fair comparison)
+        results.results.append(Result(depth * actual_iter, error))
         print(
-            f"DF-VQLS: max_iter={max_iter}, depth={depth * max_iter}, error={error:.4f}"
+            f"DF-VQLS: iter={actual_iter}, depth={depth * actual_iter}, "
+            f"error={error:.4f}, cost={checkpoint_data['cost']:.6f}"
         )
 
     save_result_list(results, f"output/dfvqls_{title}.json")
+    print(f"\nTotal optimization completed in {actual_iterations} iterations")
     return results
 
 

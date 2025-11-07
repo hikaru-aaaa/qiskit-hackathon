@@ -48,18 +48,21 @@ class Optimizer:
         self,
         cost_function: Callable[[np.ndarray], float],
         initial_params: np.ndarray,
-        pbar: Optional[tqdm] = None
+        pbar: Optional[tqdm] = None,
+        track_iterations: bool = False
     ) -> OptimizeResult:
         """
         Optimize variational parameters.
-        
+
         Args:
             cost_function: Cost function to minimize
             initial_params: Initial parameter values
             pbar: Optional progress bar (if None, will create one if verbose=True)
-        
+            track_iterations: If True, store iteration history (params and cost at each iteration)
+
         Returns:
             Optimization result from scipy.optimize.minimize
+            If track_iterations=True, result will have 'iteration_history' attribute
         """
         # Create progress bar if needed
         if pbar is None and self.verbose:
@@ -69,11 +72,24 @@ class Optimizer:
                 unit="iter",
                 disable=not self.verbose
             )
-        
-        # Wrap cost function to update progress bar
+
+        # Initialize iteration history if tracking is enabled
+        iteration_history = [] if track_iterations else None
+
+        # Wrap cost function to update progress bar and track iterations
         def wrapped_cost(params):
-            return cost_function(params, pbar=pbar)
-        
+            cost = cost_function(params, pbar=pbar)
+
+            # Store iteration data if tracking is enabled
+            if iteration_history is not None:
+                iteration_history.append({
+                    'iteration': len(iteration_history),
+                    'params': params.copy(),
+                    'cost': float(cost)
+                })
+
+            return cost
+
         # Run optimization
         result = minimize(
             fun=wrapped_cost,
@@ -81,10 +97,14 @@ class Optimizer:
             method=self.method,
             options={'maxiter': self.max_iter}
         )
-        
+
         # Close progress bar if we created it
         if pbar is not None and self.verbose:
             pbar.close()
-        
+
+        # Attach iteration history to result if tracking was enabled
+        if track_iterations:
+            result.iteration_history = iteration_history
+
         return result
 

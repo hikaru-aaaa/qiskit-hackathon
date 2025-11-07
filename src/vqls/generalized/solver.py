@@ -97,7 +97,8 @@ class DFVQLSSolver:
         )
 
     def solve(
-        self, K: np.ndarray, f: np.ndarray, initial_params: Optional[np.ndarray] = None
+        self, K: np.ndarray, f: np.ndarray, initial_params: Optional[np.ndarray] = None,
+        track_iterations: bool = False
     ) -> Tuple[np.ndarray, OptimizeResult, Tuple[QuantumCircuit, QuantumCircuit]]:
         """
         Solve the linear system Ku = f.
@@ -108,9 +109,11 @@ class DFVQLSSolver:
             initial_params: Optional initial parameters for ansatz (default: random)
                 If provided, must have shape (num_qubits × num_layers,)
                 Useful for warm-starting from QSVT or previous solutions
+            track_iterations: If True, store iteration history (params and cost at each iteration)
 
         Returns:
             Tuple of (solution_vector, optimization_result, (numerator_circuit, denominator_circuit))
+            If track_iterations=True, optimization_result will have 'iteration_history' attribute
 
         Raises:
             ValueError: If matrix/vector dimensions don't match or invalid initial_params
@@ -166,7 +169,8 @@ class DFVQLSSolver:
 
         # Run optimization
         result = self.optimizer.optimize(
-            cost_function=cost_fn, initial_params=initial_params
+            cost_function=cost_fn, initial_params=initial_params,
+            track_iterations=track_iterations
         )
 
         if self.verbose:
@@ -192,6 +196,24 @@ class DFVQLSSolver:
         final_circuits = self._build_final_circuits(result.x, K, f)
 
         return u_scaled, result, final_circuits
+
+    def get_solution_at_params(self, params: np.ndarray, K: np.ndarray, f: np.ndarray) -> np.ndarray:
+        """
+        Reconstruct solution vector from parameters at a specific iteration.
+
+        This is useful for extracting solutions from iteration history checkpoints.
+
+        Args:
+            params: Ansatz parameters from a specific iteration
+            K: Coefficient matrix
+            f: Right-hand side vector
+
+        Returns:
+            Scaled solution vector at the given parameters
+        """
+        u_quantum = self._extract_solution(params)
+        u_scaled = scale_solution(u_quantum, K, f)
+        return u_scaled
 
     def _extract_solution(self, params: np.ndarray) -> np.ndarray:
         """

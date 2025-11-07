@@ -52,8 +52,23 @@ class DFVQLSSolver(LinearSystemSolver):
             use_parallel=use_parallel,
         )
 
+    def get_solution_at_params(self, params: np.ndarray, A: np.ndarray, b: np.ndarray) -> np.ndarray:
+        """
+        指定されたパラメータで解を再構築
+
+        Args:
+            params: アンサッツパラメータ
+            A: 係数行列
+            b: 右辺ベクトル
+
+        Returns:
+            スケール済み解ベクトル
+        """
+        return self.solver.get_solution_at_params(params, A, b)
+
     def solve(
-        self, A: np.ndarray, b: np.ndarray, initial_params: np.ndarray = None
+        self, A: np.ndarray, b: np.ndarray, initial_params: np.ndarray = None,
+        track_iterations: bool = False
     ) -> Tuple[np.ndarray, dict, Tuple[QuantumCircuit, QuantumCircuit]]:
         """
         線形方程式系 Ax = b をDF-VQLSで解く
@@ -62,11 +77,15 @@ class DFVQLSSolver(LinearSystemSolver):
             A: 係数行列 (N×N)
             b: 右辺ベクトル (N,)
             initial_params: 初期パラメータ (optional, warm start用)
+            track_iterations: 反復履歴を記録するか (optional)
 
         Returns:
             Tuple of (解ベクトル, メタデータ, (numerator_circuit, denominator_circuit))
+            track_iterations=Trueの場合、メタデータに'iteration_history'が含まれる
         """
-        x_quantum, result, circuits = self.solver.solve(A, b, initial_params=initial_params)
+        x_quantum, result, circuits = self.solver.solve(
+            A, b, initial_params=initial_params, track_iterations=track_iterations
+        )
 
         metadata = {
             "method": "DF-VQLS",
@@ -75,5 +94,9 @@ class DFVQLSSolver(LinearSystemSolver):
             "success": result.success,
             "optimize_result": result,
         }
+
+        # Include iteration history if tracking was enabled
+        if track_iterations and hasattr(result, 'iteration_history'):
+            metadata["iteration_history"] = result.iteration_history
 
         return x_quantum, metadata, circuits
