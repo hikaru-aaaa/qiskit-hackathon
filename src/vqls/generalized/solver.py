@@ -164,16 +164,13 @@ class DFVQLSSolver:
             if self.verbose:
                 print("Using provided initial parameters (warm start)")
 
-        # Create cost function wrapper
-        def cost_fn(params, pbar=None):
-            return self.cost_function.compute(
-                params, K, f, pbar=pbar, use_parallel=self.use_parallel
-            )
-
         # Run optimization
+        # Note: optimizer now takes cost_function object directly and K, f matrices
         result = self.optimizer.optimize(
-            cost_function=cost_fn,
+            cost_function=self.cost_function,
             initial_params=initial_params,
+            K=K,
+            f=f,
             track_iterations=track_iterations,
         )
 

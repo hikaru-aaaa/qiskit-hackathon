@@ -294,3 +294,79 @@ class CostFunction:
         
         return cost
 
+    def compute_with_gradient(
+        self,
+        params: np.ndarray,
+        K: np.ndarray,
+        f: np.ndarray,
+        pbar: Optional[object] = None,
+        use_parallel: bool = False,
+        epsilon: float = 1e-5
+    ) -> tuple:
+        """
+        Compute cost function and its gradient using finite differences.
+
+        Gradient is computed using central difference formula:
+            ∂C/∂θ_i ≈ [C(θ + h*e_i) - C(θ - h*e_i)] / (2h)
+
+        where e_i is the unit vector in direction i and h is epsilon.
+
+        Args:
+            params: Ansatz parameters (shape: num_params)
+            K: Coefficient matrix
+            f: Right-hand side vector
+            pbar: Optional progress bar
+            use_parallel: Whether to use parallel execution
+            epsilon: Step size for finite differences (default: 1e-5)
+
+        Returns:
+            cost: Cost function value at params
+            gradient: Gradient vector (shape: num_params)
+
+        Note:
+            This requires 2*num_params + 1 cost evaluations:
+            - 1 evaluation at current params
+            - 2*num_params evaluations for gradient (forward and backward for each param)
+        """
+        from tqdm import tqdm
+
+        num_params = len(params)
+        gradient = np.zeros(num_params)
+
+        # Compute cost at current parameters
+        cost_current = self.compute(params, K, f, pbar=None, use_parallel=use_parallel)
+
+        # Create progress bar for gradient computation
+        grad_pbar = None
+        if self.verbose and pbar is None:
+            grad_pbar = tqdm(total=num_params, desc="Computing gradient", leave=False)
+
+        # Compute gradient for each parameter using central differences
+        for i in range(num_params):
+            # Create parameter perturbations
+            params_forward = params.copy()
+            params_backward = params.copy()
+
+            params_forward[i] += epsilon
+            params_backward[i] -= epsilon
+
+            # Compute costs at perturbed parameters
+            cost_forward = self.compute(params_forward, K, f, pbar=None, use_parallel=use_parallel)
+            cost_backward = self.compute(params_backward, K, f, pbar=None, use_parallel=use_parallel)
+
+            # Central difference formula
+            gradient[i] = (cost_forward - cost_backward) / (2 * epsilon)
+
+            if grad_pbar:
+                grad_pbar.update(1)
+
+        if grad_pbar:
+            grad_pbar.close()
+
+        # Update main progress bar if provided
+        if pbar is not None:
+            pbar.update(1)
+            pbar.set_postfix({'cost': f'{cost_current:.6f}', 'grad_norm': f'{np.linalg.norm(gradient):.6f}'})
+
+        return cost_current, gradient
+
