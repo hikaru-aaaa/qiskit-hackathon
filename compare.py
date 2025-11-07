@@ -18,7 +18,9 @@ from src.utils.preconditioning import (
     print_condition_number_analysis,
 )
 from test_combined import (
-    create_matrix_with_condition_number,
+    create_problem_2x2,
+    create_problem_4x4,
+    create_problem_8x8,
 )
 
 
@@ -42,7 +44,9 @@ def calculate_qc_depth(qc: QuantumCircuit) -> int:
     return depth
 
 
-def collect_qsvt_results(A: np.ndarray, b: np.ndarray, title: str, use_depth_matched_dir: bool = False) -> ResultList:
+def collect_qsvt_results(
+    A: np.ndarray, b: np.ndarray, title: str, use_depth_matched_dir: bool = False
+) -> ResultList:
     kappa_list = [1, 2, 3, 4, 5, 6, 7, 8]
     results = ResultList(name="QSVT", results=[])
     for kappa in kappa_list:
@@ -65,7 +69,7 @@ def collect_dfvqls_results(
     b: np.ndarray,
     title: str,
     qsvt_depth: int = None,
-    use_preconditioning: bool = False
+    use_preconditioning: bool = False,
 ) -> ResultList:
     """
     Collect DF-VQLS results, optionally matching QSVT depth budget.
@@ -77,7 +81,9 @@ def collect_dfvqls_results(
         qsvt_depth: If provided, run DF-VQLS until total depth matches this value
         use_preconditioning: If True, apply Jacobi preconditioning (improves convergence)
     """
-    results = ResultList(name="DF-VQLS" + (" (Precond)" if use_preconditioning else ""), results=[])
+    results = ResultList(
+        name="DF-VQLS" + (" (Precond)" if use_preconditioning else ""), results=[]
+    )
 
     # Apply preconditioning if requested
     if use_preconditioning:
@@ -108,12 +114,7 @@ def collect_dfvqls_results(
         print(f"  QSVT depth budget: {qsvt_depth}")
         print(f"  Running DF-VQLS for {max_iter} iterations to match QSVT depth")
         # Create evenly distributed checkpoints
-        checkpoint_iters = [
-            max_iter // 10,
-            max_iter // 5,
-            max_iter // 2,
-            max_iter
-        ]
+        checkpoint_iters = [max_iter // 10, max_iter // 5, max_iter // 2, max_iter]
         checkpoint_iters = [c for c in checkpoint_iters if c > 0]  # Remove any zeros
     else:
         # Use default checkpoints
@@ -127,7 +128,7 @@ def collect_dfvqls_results(
         num_layers=2,
         optimizer_method="COBYLA",
         max_iter=max_iter,
-        verbose=False,
+        verbose=True,
     )
 
     print(f"\nDF-VQLS: Running optimization with max_iter={max_iter}")
@@ -207,7 +208,10 @@ def load_result_list(filename: str) -> ResultList:
 
 
 def draw_result_plot(
-    result_list1: ResultList, result_list2: ResultList, title: str, use_depth_matched_dir: bool = False
+    result_list1: ResultList,
+    result_list2: ResultList,
+    title: str,
+    use_depth_matched_dir: bool = False,
 ) -> None:
     plt.plot(
         [result.depth for result in result_list1.results],
@@ -231,46 +235,53 @@ def draw_result_plot(
 
 
 def main() -> None:
-    kappa = 4
-
     # 2x2 system
     print("=" * 80)
     print("Testing 2x2 system")
     print("=" * 80)
-    title = f"2x2_kappa={kappa}"
-    A, b = create_matrix_with_condition_number(2, kappa)
+    A, b, desc = create_problem_2x2()
+    title = "2x2"
+    print(f"Problem: {desc}")
     qsvt_results = collect_qsvt_results(A, b, title, use_depth_matched_dir=True)
     # Get max depth from QSVT results
     qsvt_max_depth = max(result.depth for result in qsvt_results.results)
     print(f"\nQSVT maximum depth: {qsvt_max_depth}")
     print(f"Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-    dfvqls_results = collect_dfvqls_results(A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True)
+    dfvqls_results = collect_dfvqls_results(
+        A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True
+    )
     draw_result_plot(qsvt_results, dfvqls_results, title, use_depth_matched_dir=True)
 
     # 4x4 system
     print("\n" + "=" * 80)
     print("Testing 4x4 system")
     print("=" * 80)
-    title = f"4x4_kappa={kappa}"
-    A, b = create_matrix_with_condition_number(4, kappa)
+    A, b, desc = create_problem_4x4()
+    title = "4x4"
+    print(f"Problem: {desc}")
     qsvt_results = collect_qsvt_results(A, b, title, use_depth_matched_dir=True)
     qsvt_max_depth = max(result.depth for result in qsvt_results.results)
     print(f"\nQSVT maximum depth: {qsvt_max_depth}")
     print(f"Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-    dfvqls_results = collect_dfvqls_results(A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True)
+    dfvqls_results = collect_dfvqls_results(
+        A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True
+    )
     draw_result_plot(qsvt_results, dfvqls_results, title, use_depth_matched_dir=True)
 
     # 8x8 system
     print("\n" + "=" * 80)
     print("Testing 8x8 system")
     print("=" * 80)
-    title = f"8x8_kappa={kappa}"
-    A, b = create_matrix_with_condition_number(8, kappa)
+    A, b, desc = create_problem_8x8()
+    title = "8x8"
+    print(f"Problem: {desc}")
     qsvt_results = collect_qsvt_results(A, b, title, use_depth_matched_dir=True)
     qsvt_max_depth = max(result.depth for result in qsvt_results.results)
     print(f"\nQSVT maximum depth: {qsvt_max_depth}")
     print(f"Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-    dfvqls_results = collect_dfvqls_results(A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True)
+    dfvqls_results = collect_dfvqls_results(
+        A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True
+    )
     draw_result_plot(qsvt_results, dfvqls_results, title, use_depth_matched_dir=True)
 
     print("\n" + "=" * 80)
