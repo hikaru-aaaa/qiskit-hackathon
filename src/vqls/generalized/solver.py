@@ -97,8 +97,11 @@ class DFVQLSSolver:
         )
 
     def solve(
-        self, K: np.ndarray, f: np.ndarray, initial_params: Optional[np.ndarray] = None,
-        track_iterations: bool = False
+        self,
+        K: np.ndarray,
+        f: np.ndarray,
+        initial_params: Optional[np.ndarray] = None,
+        track_iterations: bool = False,
     ) -> Tuple[np.ndarray, OptimizeResult, Tuple[QuantumCircuit, QuantumCircuit]]:
         """
         Solve the linear system Ku = f.
@@ -106,7 +109,7 @@ class DFVQLSSolver:
         Args:
             K: Coefficient matrix (N×N, must match matrix_size)
             f: Right-hand side vector (N×1)
-            initial_params: Optional initial parameters for ansatz (default: random)
+            initial_params: Optional initial parameters for ansatz (default: zero)
                 If provided, must have shape (num_qubits × num_layers,)
                 Useful for warm-starting from QSVT or previous solutions
             track_iterations: If True, store iteration history (params and cost at each iteration)
@@ -145,12 +148,12 @@ class DFVQLSSolver:
             )
             print("=" * 70 + "\n")
 
-        # Initialize parameters (random or provided)
+        # Initialize parameters (all zero or provided)
         num_params = self.ansatz.num_parameters()
         if initial_params is None:
-            initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+            initial_params = np.zeros(num_params)
             if self.verbose:
-                print("Using random initial parameters")
+                print("Using zero initial parameters")
         else:
             # Validate shape
             if initial_params.shape != (num_params,):
@@ -169,8 +172,9 @@ class DFVQLSSolver:
 
         # Run optimization
         result = self.optimizer.optimize(
-            cost_function=cost_fn, initial_params=initial_params,
-            track_iterations=track_iterations
+            cost_function=cost_fn,
+            initial_params=initial_params,
+            track_iterations=track_iterations,
         )
 
         if self.verbose:
@@ -197,7 +201,9 @@ class DFVQLSSolver:
 
         return u_scaled, result, final_circuits
 
-    def get_solution_at_params(self, params: np.ndarray, K: np.ndarray, f: np.ndarray) -> np.ndarray:
+    def get_solution_at_params(
+        self, params: np.ndarray, K: np.ndarray, f: np.ndarray
+    ) -> np.ndarray:
         """
         Reconstruct solution vector from parameters at a specific iteration.
 
