@@ -11,14 +11,13 @@ Built with Qiskit for quantum circuit simulation and real device deployment.
 
 ## What is QSVT?
 
-**Quantum Singular Value Transformation** is a direct quantum algorithm that solves linear systems by applying polynomial transformations to matrix singular values.
+**Quantum Singular Value Transformation** is a powerful and unified quantum framework that allows for the construction of quantum circuits to apply arbitrary polynomial transformations to the singular values of a matrix.
 
 ### How QSVT Works
 
 1. **Block Encoding**: Embed matrix A into a unitary operator U
 2. **Polynomial Approximation**: Apply polynomial p(x) ≈ 1/x to approximate A⁻¹
 3. **Quantum Circuit**: Construct QSVT circuit using the approximation
-4. **Hadamard Test**: Extract solution amplitudes via measurement
 
 **Key Formula:**
 
@@ -32,11 +31,9 @@ Built with Qiskit for quantum circuit simulation and real device deployment.
 
 - Direct computation (no iterative optimization)
 - Theoretical polynomial quantum speedup
-- Well-defined accuracy based on polynomial degree
 
 **Limitations:**
 
-- Requires 2ⁿ Hadamard tests to extract full solution (expensive)
 - Lower precision in practice (~10⁻⁴)
 - Block encoding overhead
 
@@ -52,7 +49,7 @@ Built with Qiskit for quantum circuit simulation and real device deployment.
 2. **Ansatz**: Prepare trial solution |u(θ)⟩ = V(θ)|0⟩ using parameterized circuit
 3. **Swap Test**: Compute cost function via quantum state overlap measurement
 4. **Optimization**: Classical optimizer (COBYLA) updates parameters θ to minimize cost
-5. **Convergence**: Iterate until cost C(θ) → 0
+5. **Convergence**: Iterate until cost C(θ) ~ 0
 
 **Cost Function:**
 
@@ -65,16 +62,13 @@ C(θ) = 1 - |⟨b|A|u(θ)⟩|² / ⟨u(θ)|A†A|u(θ)⟩
 **Strengths:**
 
 - No matrix decomposition required
-- High precision (~10⁻⁶ for small systems)
-- Only 2 circuit evaluations per iteration (numerator and denominator)
 - Flexible ansatz can adapt to problem structure
 
 **Limitations:**
 
 - Iterative optimization (many evaluations needed)
-- Amplitude encoding creates quantum input problem
+- Amplitude encoding creates quantum input problem (Could be mitigated with q-RAMs)
 - Barren plateaus for large systems
-- Simulator-dependent for state preparation
 
 ## References
 
