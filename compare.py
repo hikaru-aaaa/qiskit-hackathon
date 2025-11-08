@@ -256,6 +256,7 @@ def main() -> None:
     QiskitRuntimeService.save_account(
         channel="ibm_quantum_platform",
         token=os.getenv("API_KEY"),
+        instance=os.getenv("CRN"),
         overwrite=True,
     )
 
