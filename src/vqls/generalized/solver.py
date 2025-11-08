@@ -40,8 +40,10 @@ class DFVQLSSolver:
         optimizer_method: str = "COBYLA",
         max_iter: int = 200,
         random_seed: Optional[int] = None,
-        verbose: bool = True,
+        verbose: bool = False,
         use_parallel: bool = False,  # Enable parallel execution for numerator/denominator circuits
+        simulator: Optional[AerSimulator] = None,
+        shots: Optional[int] = None,
     ):
         """
         Initialize DF-VQLS solver.
@@ -79,7 +81,12 @@ class DFVQLSSolver:
         )
 
         # Create simulator (statevector mode for exact simulation)
-        self.simulator = AerSimulator(method="statevector")
+        if simulator is None:
+            self.simulator = AerSimulator(method="statevector")
+        else:
+            self.simulator = simulator
+        self._fast_simulator = AerSimulator(method="statevector")
+        self.shots = shots
 
         self.cost_function = CostFunction(
             circuit_builder=self.circuit_builder,
@@ -87,6 +94,7 @@ class DFVQLSSolver:
             ansatz=self.ansatz,
             simulator=self.simulator,
             verbose=verbose,
+            shots=self.shots,
         )
 
         self.optimizer = Optimizer(
@@ -238,8 +246,8 @@ class DFVQLSSolver:
         circ.save_statevector()
 
         # Run simulation
-        transpiled_circ = transpile(circ, self.simulator)
-        result = self.simulator.run(transpiled_circ).result()
+        transpiled_circ = transpile(circ, self._fast_simulator)
+        result = self._fast_simulator.run(transpiled_circ).result()
         u_theta = np.real(np.array(result.get_statevector(circ)))
 
         return u_theta
@@ -263,15 +271,32 @@ class DFVQLSSolver:
         vec_KT, _ = self.state_preparer.prepare_matrix_transpose(K)
         f_norm = self.state_preparer.prepare_vector(f)
 
-        # Extract |u(θ*)⟩ with optimized parameters
-        u_theta = self._extract_solution(params)
+        if self.shots is None:
+            # === STATEVECTOR PATH ===
+            # (This path is used by temp_solver in compare.py if shots=None)
+            u_theta = self._extract_solution(params)
 
-        # Build both circuits
-        numerator_circuit = self.circuit_builder.build_numerator_circuit(
-            vec_K, f_norm, u_theta
-        )
-        denominator_circuit = self.circuit_builder.build_denominator_circuit(
-            vec_K, vec_KT, u_theta
-        )
+            numerator_circuit = (
+                self.circuit_builder.build_numerator_circuit_statevector(
+                    vec_K, f_norm, u_theta
+                )
+            )
+            denominator_circuit = (
+                self.circuit_builder.build_denominator_circuit_statevector(
+                    vec_K, vec_KT, u_theta
+                )
+            )
+        else:
+            # === QUANTUM/NOISY PATH ===
+            # (This path is used when shots=8192)
+            u_theta_circuit = self.cost_function._compute_u_theta_circuit(params)
 
+            numerator_circuit = self.circuit_builder.build_numerator_circuit_quantum(
+                vec_K, f_norm, u_theta_circuit
+            )
+            denominator_circuit = (
+                self.circuit_builder.build_denominator_circuit_quantum(
+                    vec_K, vec_KT, u_theta_circuit
+                )
+            )
         return numerator_circuit, denominator_circuit

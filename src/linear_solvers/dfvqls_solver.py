@@ -4,10 +4,11 @@ DF-VQLS Solver implementation
 Decomposition-Free Variational Quantum Linear Solverを提供します。
 """
 
-from typing import Tuple
+from typing import Tuple, Optional
 import numpy as np
 from scipy.optimize import OptimizeResult
 from qiskit import QuantumCircuit
+from qiskit_aer import AerSimulator
 
 from .base import LinearSystemSolver
 from ..vqls.generalized import DFVQLSSolver as GeneralizedDFVQLSSolver
@@ -29,6 +30,8 @@ class DFVQLSSolver(LinearSystemSolver):
         random_seed: int = None,
         verbose: bool = True,
         use_parallel: bool = False,
+        simulator: Optional[AerSimulator] = None,
+        shots: Optional[int] = None,
     ):
         """
         DF-VQLSソルバーを初期化
@@ -50,9 +53,13 @@ class DFVQLSSolver(LinearSystemSolver):
             random_seed=random_seed,
             verbose=verbose,
             use_parallel=use_parallel,
+            simulator=simulator,
+            shots=shots,
         )
 
-    def get_solution_at_params(self, params: np.ndarray, A: np.ndarray, b: np.ndarray) -> np.ndarray:
+    def get_solution_at_params(
+        self, params: np.ndarray, A: np.ndarray, b: np.ndarray
+    ) -> np.ndarray:
         """
         指定されたパラメータで解を再構築
 
@@ -67,8 +74,11 @@ class DFVQLSSolver(LinearSystemSolver):
         return self.solver.get_solution_at_params(params, A, b)
 
     def solve(
-        self, A: np.ndarray, b: np.ndarray, initial_params: np.ndarray = None,
-        track_iterations: bool = False
+        self,
+        A: np.ndarray,
+        b: np.ndarray,
+        initial_params: np.ndarray = None,
+        track_iterations: bool = False,
     ) -> Tuple[np.ndarray, dict, Tuple[QuantumCircuit, QuantumCircuit]]:
         """
         線形方程式系 Ax = b をDF-VQLSで解く
@@ -96,7 +106,7 @@ class DFVQLSSolver(LinearSystemSolver):
         }
 
         # Include iteration history if tracking was enabled
-        if track_iterations and hasattr(result, 'iteration_history'):
+        if track_iterations and hasattr(result, "iteration_history"):
             metadata["iteration_history"] = result.iteration_history
 
         return x_quantum, metadata, circuits

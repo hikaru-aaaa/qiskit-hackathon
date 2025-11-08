@@ -1,11 +1,15 @@
 import json
+import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from dotenv import load_dotenv
 from qiskit import QuantumCircuit
+from qiskit_aer import AerSimulator
+from qiskit_ibm_runtime import QiskitRuntimeService
 
 # Add src/qsvt to Python path for inverse_matrix import
 sys.path.insert(0, str(Path(__file__).parent / "src" / "qsvt"))
@@ -14,8 +18,8 @@ from src.linear_solvers import DFVQLSSolver
 from src.qsvt.lse_solver import LSESolver
 from src.utils.preconditioning import (
     jacobi_precondition,
-    recover_solution,
     print_condition_number_analysis,
+    recover_solution,
 )
 from test_combined import (
     create_problem_2x2,
@@ -45,13 +49,24 @@ def calculate_qc_depth(qc: QuantumCircuit) -> int:
 
 
 def collect_qsvt_results(
+<<<<<<< HEAD
     A: np.ndarray, b: np.ndarray, title: str, use_depth_matched_dir: bool = False
+=======
+    A: np.ndarray,
+    b: np.ndarray,
+    title: str,
+    simulator: AerSimulator,
+    shot: int,
+    use_depth_matched_dir: bool = False,
+>>>>>>> 1bbaa89dab73aa0b5b87ac0b441710b4cf5c80b9
 ) -> ResultList:
     kappa_list = [1, 2, 3, 4, 5, 6, 7, 8]
     results = ResultList(name="QSVT", results=[])
     for kappa in kappa_list:
-        qsvt_solver = LSESolver(A, b, kappa=kappa)
-        x_solution, qsvt_circuit = qsvt_solver.solve_linear_system_quantum()
+        qsvt_solver = LSESolver(A, b, simulator, kappa=kappa, shot=shot)
+        x_solution, qsvt_circuit = qsvt_solver.solve_linear_system_quantum(
+            statevector=False
+        )
         depth = calculate_qc_depth(qsvt_circuit)
         classical_solution = np.linalg.solve(A, b)
         error = np.linalg.norm(x_solution - classical_solution) / np.linalg.norm(
@@ -68,6 +83,8 @@ def collect_dfvqls_results(
     A: np.ndarray,
     b: np.ndarray,
     title: str,
+    simulator: AerSimulator,
+    shot: int,
     qsvt_depth: int = None,
     use_preconditioning: bool = False,
 ) -> ResultList:
@@ -100,6 +117,8 @@ def collect_dfvqls_results(
         optimizer_method="COBYLA",
         max_iter=1,
         verbose=False,
+        simulator=simulator,
+        shots=shot,
     )
     _, _, (num_circuit, den_circuit) = temp_solver.solve(A_work, b_work)
     depth_num = calculate_qc_depth(num_circuit)
@@ -128,7 +147,13 @@ def collect_dfvqls_results(
         num_layers=2,
         optimizer_method="COBYLA",
         max_iter=max_iter,
+<<<<<<< HEAD
         verbose=True,
+=======
+        verbose=False,
+        simulator=simulator,
+        shots=shot,
+>>>>>>> 1bbaa89dab73aa0b5b87ac0b441710b4cf5c80b9
     )
 
     print(f"\nDF-VQLS: Running optimization with max_iter={max_iter}")
@@ -235,58 +260,104 @@ def draw_result_plot(
 
 
 def main() -> None:
-    # 2x2 system
-    print("=" * 80)
-    print("Testing 2x2 system")
-    print("=" * 80)
-    A, b, desc = create_problem_2x2()
-    title = "2x2"
-    print(f"Problem: {desc}")
-    qsvt_results = collect_qsvt_results(A, b, title, use_depth_matched_dir=True)
-    # Get max depth from QSVT results
-    qsvt_max_depth = max(result.depth for result in qsvt_results.results)
-    print(f"\nQSVT maximum depth: {qsvt_max_depth}")
-    print(f"Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-    dfvqls_results = collect_dfvqls_results(
-        A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True
+    shot = 8192
+    kappa = 4
+    load_dotenv()
+    QiskitRuntimeService.save_account(
+        channel="ibm_quantum_platform",
+        token=os.getenv("API_KEY"),
+        instance=os.getenv("CRN"),
+        overwrite=True,
     )
-    draw_result_plot(qsvt_results, dfvqls_results, title, use_depth_matched_dir=True)
 
-    # 4x4 system
-    print("\n" + "=" * 80)
-    print("Testing 4x4 system")
-    print("=" * 80)
-    A, b, desc = create_problem_4x4()
-    title = "4x4"
-    print(f"Problem: {desc}")
-    qsvt_results = collect_qsvt_results(A, b, title, use_depth_matched_dir=True)
-    qsvt_max_depth = max(result.depth for result in qsvt_results.results)
-    print(f"\nQSVT maximum depth: {qsvt_max_depth}")
-    print(f"Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-    dfvqls_results = collect_dfvqls_results(
-        A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True
-    )
-    draw_result_plot(qsvt_results, dfvqls_results, title, use_depth_matched_dir=True)
+    has_noise_list = [True]
+    for has_noise in has_noise_list:
+        if has_noise:
+            service = QiskitRuntimeService()
+            real_backend = service.backend("ibm_torino")
+            simulator = AerSimulator.from_backend(real_backend)
+        else:
+            simulator = AerSimulator(method="statevector")
 
-    # 8x8 system
-    print("\n" + "=" * 80)
-    print("Testing 8x8 system")
-    print("=" * 80)
-    A, b, desc = create_problem_8x8()
-    title = "8x8"
-    print(f"Problem: {desc}")
-    qsvt_results = collect_qsvt_results(A, b, title, use_depth_matched_dir=True)
-    qsvt_max_depth = max(result.depth for result in qsvt_results.results)
-    print(f"\nQSVT maximum depth: {qsvt_max_depth}")
-    print(f"Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-    dfvqls_results = collect_dfvqls_results(
-        A, b, title, qsvt_depth=qsvt_max_depth, use_preconditioning=True
-    )
-    draw_result_plot(qsvt_results, dfvqls_results, title, use_depth_matched_dir=True)
+        # 2x2 system
+        print("=" * 80)
+        print("Testing 2x2 system")
+        print("=" * 80)
+        title = f"2x2_kappa={kappa}_noise={has_noise}"
+        A, b = create_matrix_with_condition_number(2, kappa)
+        qsvt_results = collect_qsvt_results(
+            A, b, title, simulator, shot, use_depth_matched_dir=True
+        )
+        # Get max depth from QSVT results
+        qsvt_max_depth = max(result.depth for result in qsvt_results.results)
+        print(f"\nQSVT maximum depth: {qsvt_max_depth}")
+        print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
+        dfvqls_results = collect_dfvqls_results(
+            A,
+            b,
+            title,
+            simulator,
+            shot,
+            qsvt_depth=qsvt_max_depth,
+            use_preconditioning=True,
+        )
+        draw_result_plot(
+            qsvt_results, dfvqls_results, title, use_depth_matched_dir=True
+        )
 
-    print("\n" + "=" * 80)
-    print("All comparisons complete!")
-    print("=" * 80)
+        # 4x4 system
+        print("\n" + "=" * 80)
+        print("Testing 4x4 system")
+        print("=" * 80)
+        title = f"4x4_kappa={kappa}_noise={has_noise}"
+        A, b = create_matrix_with_condition_number(4, kappa)
+        qsvt_results = collect_qsvt_results(
+            A, b, title, simulator, shot, use_depth_matched_dir=True
+        )
+        qsvt_max_depth = max(result.depth for result in qsvt_results.results)
+        print(f"\nQSVT maximum depth: {qsvt_max_depth}")
+        print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
+        dfvqls_results = collect_dfvqls_results(
+            A,
+            b,
+            title,
+            simulator,
+            shot,
+            qsvt_depth=qsvt_max_depth,
+            use_preconditioning=True,
+        )
+        draw_result_plot(
+            qsvt_results, dfvqls_results, title, use_depth_matched_dir=True
+        )
+
+        # 8x8 system
+        print("\n" + "=" * 80)
+        print("Testing 8x8 system")
+        print("=" * 80)
+        title = f"8x8_kappa={kappa}_noise={has_noise}"
+        A, b = create_matrix_with_condition_number(8, kappa)
+        qsvt_results = collect_qsvt_results(
+            A, b, title, simulator, shot, use_depth_matched_dir=True
+        )
+        qsvt_max_depth = max(result.depth for result in qsvt_results.results)
+        print(f"\nQSVT maximum depth: {qsvt_max_depth}")
+        print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
+        dfvqls_results = collect_dfvqls_results(
+            A,
+            b,
+            title,
+            simulator,
+            shot,
+            qsvt_depth=qsvt_max_depth,
+            use_preconditioning=True,
+        )
+        draw_result_plot(
+            qsvt_results, dfvqls_results, title, use_depth_matched_dir=True
+        )
+
+        print("\n" + "=" * 80)
+        print("All comparisons complete!")
+        print("=" * 80)
     return
 
 
