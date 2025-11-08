@@ -1,8 +1,15 @@
 import numpy as np
-from qiskit import QuantumCircuit, transpile
-from qiskit.circuit.library import StatePreparation
+from qiskit import QuantumCircuit, generate_preset_pass_manager
+from qiskit.circuit.library import StatePreparation, XGate
 from qiskit.quantum_info import Statevector
+from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import ALAPScheduleAnalysis
 from qiskit_aer import AerSimulator
+from qiskit_ibm_runtime.transpiler.passes.scheduling import (
+    ALAPScheduleAnalysis,
+    DynamicCircuitInstructionDurations,
+    PadDynamicalDecoupling,
+)
 
 from .inverse_matrix import compute_matrix_inverse_qsvt, generate_angles_qsvt_and_scale
 
@@ -15,14 +22,14 @@ class LSESolver:
     QSVTと古典的な方法の両方をサポート
     """
 
-    def __init__(self, A, b, simulator, kappa, shot):
+    def __init__(self, A, b, backend, kappa, shot):
         self.A = np.asarray(A, dtype=complex)
         self.b = np.asarray(b, dtype=complex)
         self.n, self.m = self.A.shape
         self.frobenius_norm = np.linalg.norm(self.A, ord="fro")
         self.A_normalized = self.A / self.frobenius_norm
         self.kappa = kappa
-        self.simulator: AerSimulator = simulator
+        self.backend = backend
         self.shot = shot
 
     def solve_lse_classical(self):
@@ -181,10 +188,23 @@ class LSESolver:
                 # ========================================
                 # 実行と結果取得
                 # ========================================
-                transpiled_circuit = transpile(test_circuit, self.simulator)
-                result = self.simulator.run(
-                    transpiled_circuit, shots=self.shot
-                ).result()
+                target = self.backend.target
+                pm = generate_preset_pass_manager(3, target=target, seed_transpiler=42)
+
+                durations = DynamicCircuitInstructionDurations.from_backend(
+                    self.backend
+                )
+                dd_sequence = [XGate(), XGate()]
+                pm.scheduling = PassManager(
+                    [
+                        ALAPScheduleAnalysis(durations),
+                        PadDynamicalDecoupling(durations, dd_sequence),
+                    ]
+                )
+                simulator = AerSimulator.from_backend(self.backend)
+                # transpiled_circuit = transpile(test_circuit, simulator)
+                transpiled_circuit = pm.run(test_circuit)
+                result = simulator.run(transpiled_circuit, shots=self.shot).result()
                 counts = result.get_counts()
 
                 # ========================================

@@ -50,14 +50,14 @@ def collect_qsvt_results(
     A: np.ndarray,
     b: np.ndarray,
     title: str,
-    simulator: AerSimulator,
+    backend,
     shot: int,
     use_depth_matched_dir: bool = False,
 ) -> ResultList:
     kappa_list = [1, 2, 3, 4, 5, 6, 7, 8]
     results = ResultList(name="QSVT", results=[])
     for kappa in kappa_list:
-        qsvt_solver = LSESolver(A, b, simulator, kappa=kappa, shot=shot)
+        qsvt_solver = LSESolver(A, b, backend, kappa=kappa, shot=shot)
         x_solution, qsvt_circuit = qsvt_solver.solve_linear_system_quantum(
             statevector=False
         )
@@ -259,21 +259,22 @@ def main() -> None:
     for has_noise in has_noise_list:
         if has_noise:
             service = QiskitRuntimeService()
-            real_backend = service.backend("ibm_torino")
-            simulator = AerSimulator.from_backend(real_backend)
+            real_backend = service.backend("ibm_marrakesh")
+            # simulator = AerSimulator.from_backend(real_backend)
         else:
-            simulator = AerSimulator(method="statevector")
+            # simulator = AerSimulator(method="statevector")
+            real_backend = service.backend("statevector_simulator")
 
-        # # 2x2 system
+        # 2x2 system
         # print("=" * 80)
         # print("Testing 2x2 system")
         # print("=" * 80)
         # title = f"2x2_kappa={kappa}_noise={has_noise}"
         # A, b = create_matrix_with_condition_number(2, kappa)
         # qsvt_results = collect_qsvt_results(
-        #     A, b, title, simulator, shot, use_depth_matched_dir=True
+        #     A, b, title, real_backend, shot, use_depth_matched_dir=True
         # )
-        # # Get max depth from QSVT results
+        # Get max depth from QSVT results
         # qsvt_max_depth = max(result.depth for result in qsvt_results.results)
         # print(f"\nQSVT maximum depth: {qsvt_max_depth}")
         # print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
@@ -286,9 +287,7 @@ def main() -> None:
         #     qsvt_depth=qsvt_max_depth,
         #     use_preconditioning=True,
         # )
-        # draw_result_plot(
-        #     [qsvt_results, dfvqls_results], title, use_depth_matched_dir=True
-        # )
+        # draw_result_plot([qsvt_results], title, use_depth_matched_dir=True)
 
         # # 4x4 system
         # print("\n" + "=" * 80)
@@ -322,7 +321,7 @@ def main() -> None:
         title = f"8x8_kappa={kappa}_noise={has_noise}"
         A, b = create_matrix_with_condition_number(8, kappa)
         qsvt_results = collect_qsvt_results(
-            A, b, title, simulator, shot, use_depth_matched_dir=True
+            A, b, title, real_backend, shot, use_depth_matched_dir=True
         )
         # qsvt_max_depth = max(result.depth for result in qsvt_results.results)
         # print(f"\nQSVT maximum depth: {qsvt_max_depth}")
