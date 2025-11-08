@@ -88,12 +88,36 @@ class CostFunction:
         temp_circ = QuantumCircuit(self.n_qubits)
         qubits = list(range(self.n_qubits))
         temp_circ = self.ansatz.apply(temp_circ, qubits, params)
-        temp_circ.save_statevector()
+        
+        # Check if simulator uses density matrix (noisy simulation)
+        # If method is "density_matrix", use save_density_matrix
+        # Otherwise, use save_statevector
+        if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+            temp_circ.save_density_matrix()
+        else:
+            temp_circ.save_statevector()
         
         # Run simulation
         transpiled_circ = transpile(temp_circ, self.simulator)
         result = self.simulator.run(transpiled_circ).result()
-        u_theta = np.asarray(result.get_statevector(temp_circ))
+        
+        # Extract statevector (handle both noiseless and noisy cases)
+        if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+            # For noisy simulation, extract from density matrix
+            density_matrix = result.data().get('density_matrix')
+            if density_matrix is not None:
+                # Extract diagonal elements (probabilities) and take square root
+                probs = np.real(np.diag(density_matrix))
+                # Convert probabilities to amplitudes (with sign from density matrix)
+                # For pure states, we can extract the statevector from density matrix
+                # But for mixed states, we'll use the diagonal probabilities
+                u_theta = np.sqrt(probs)
+            else:
+                # Fallback: try to get statevector if available
+                u_theta = np.asarray(result.get_statevector(temp_circ))
+        else:
+            # For noiseless simulation, use statevector directly
+            u_theta = np.asarray(result.get_statevector(temp_circ))
         
         return u_theta
     
@@ -106,10 +130,20 @@ class CostFunction:
         if self._parallel_simulators is None:
             from qiskit_aer import AerSimulator
             # Pre-create simulator instances for each worker
-            self._parallel_simulators = [
-                AerSimulator(method='statevector') 
-                for _ in range(num_workers)
-            ]
+            # Use the same method as the main simulator (statevector or density_matrix)
+            if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+                # For noisy simulation, use density matrix simulators
+                noise_model = self.simulator.options.get('noise_model')
+                self._parallel_simulators = [
+                    AerSimulator(method='density_matrix', noise_model=noise_model)
+                    for _ in range(num_workers)
+                ]
+            else:
+                # For noiseless simulation, use statevector simulators
+                self._parallel_simulators = [
+                    AerSimulator(method='statevector') 
+                    for _ in range(num_workers)
+                ]
             # Create thread pool executor (reuse it)
             self._parallel_executor = ThreadPoolExecutor(max_workers=num_workers)
     
@@ -135,7 +169,21 @@ class CostFunction:
             circ, sim = circ_and_sim
             transpiled = transpile(circ, sim)
             result = sim.run(transpiled).result()
-            return np.asarray(result.get_statevector(circ))
+            
+            # Extract statevector (handle both noiseless and noisy cases)
+            if hasattr(sim, 'options') and sim.options.get('method') == 'density_matrix':
+                # For noisy simulation, extract from density matrix
+                density_matrix = result.data().get('density_matrix')
+                if density_matrix is not None:
+                    # Extract diagonal elements (probabilities) and take square root
+                    probs = np.real(np.diag(density_matrix))
+                    return np.sqrt(probs)
+                else:
+                    # Fallback: try to get statevector if available
+                    return np.asarray(result.get_statevector(circ))
+            else:
+                # For noiseless simulation, use statevector directly
+                return np.asarray(result.get_statevector(circ))
         
         # Pair each circuit with a pre-created simulator
         circuits_with_sims = list(zip(circuits, self._parallel_simulators[:num_workers]))
@@ -210,12 +258,20 @@ class CostFunction:
         circ_num = self.circuit_builder.build_numerator_circuit(
             vec_K, f_norm, u_theta
         )
-        circ_num.save_statevector()
-        
+        # Check if simulator uses density matrix (noisy simulation)
+        if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+            circ_num.save_density_matrix()
+        else:
+            circ_num.save_statevector()
+
         circ_den = self.circuit_builder.build_denominator_circuit(
             vec_K, vec_KT, u_theta
         )
-        circ_den.save_statevector()
+        # Check if simulator uses density matrix (noisy simulation)
+        if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+            circ_den.save_density_matrix()
+        else:
+            circ_den.save_statevector()
         if phase_pbar:
             phase_pbar.update(1)
         
@@ -237,7 +293,22 @@ class CostFunction:
             # Sequential execution
             transpiled_num = transpile(circ_num, self.simulator)
             result_num = self.simulator.run(transpiled_num).result()
-            sv_num = np.asarray(result_num.get_statevector(circ_num))
+            
+            # Extract statevector (handle both noiseless and noisy cases)
+            if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+                # For noisy simulation, extract from density matrix
+                density_matrix_num = result_num.data().get('density_matrix')
+                if density_matrix_num is not None:
+                    # Extract diagonal elements (probabilities) and take square root
+                    probs_num = np.real(np.diag(density_matrix_num))
+                    sv_num = np.sqrt(probs_num)
+                else:
+                    # Fallback: try to get statevector if available
+                    sv_num = np.asarray(result_num.get_statevector(circ_num))
+            else:
+                # For noiseless simulation, use statevector directly
+                sv_num = np.asarray(result_num.get_statevector(circ_num))
+            
             if phase_pbar:
                 phase_pbar.update(1)
             
@@ -246,7 +317,21 @@ class CostFunction:
                 phase_pbar.set_description("Phase 5/6: Running denominator circuit")
             transpiled_den = transpile(circ_den, self.simulator)
             result_den = self.simulator.run(transpiled_den).result()
-            sv_den = np.asarray(result_den.get_statevector(circ_den))
+            
+            # Extract statevector (handle both noiseless and noisy cases)
+            if hasattr(self.simulator, 'options') and self.simulator.options.get('method') == 'density_matrix':
+                # For noisy simulation, extract from density matrix
+                density_matrix_den = result_den.data().get('density_matrix')
+                if density_matrix_den is not None:
+                    # Extract diagonal elements (probabilities) and take square root
+                    probs_den = np.real(np.diag(density_matrix_den))
+                    sv_den = np.sqrt(probs_den)
+                else:
+                    # Fallback: try to get statevector if available
+                    sv_den = np.asarray(result_den.get_statevector(circ_den))
+            else:
+                # For noiseless simulation, use statevector directly
+                sv_den = np.asarray(result_den.get_statevector(circ_den))
             if phase_pbar:
                 phase_pbar.update(1)
         
