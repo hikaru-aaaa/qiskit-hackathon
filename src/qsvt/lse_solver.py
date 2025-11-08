@@ -1,13 +1,12 @@
 import numpy as np
-from .inverse_matrix import compute_matrix_inverse_qsvt, generate_angles_qsvt_and_scale
 from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation
 from qiskit.quantum_info import Statevector
-from qiskit_aer import Aer
+from qiskit_aer import AerSimulator
 
-SHOTS = 8192
+from .inverse_matrix import compute_matrix_inverse_qsvt, generate_angles_qsvt_and_scale
+
 # NOTE: ノイズなし → statevector_simulator。ノイズ付き → qasm_simulatorにしてnoise_modelを指定。
-SIMULATOR = "statevector_simulator"
 
 
 class LSESolver:
@@ -16,13 +15,15 @@ class LSESolver:
     QSVTと古典的な方法の両方をサポート
     """
 
-    def __init__(self, A, b, kappa=4):
+    def __init__(self, A, b, simulator, kappa, shot):
         self.A = np.asarray(A, dtype=complex)
         self.b = np.asarray(b, dtype=complex)
         self.n, self.m = self.A.shape
         self.frobenius_norm = np.linalg.norm(self.A, ord="fro")
         self.A_normalized = self.A / self.frobenius_norm
         self.kappa = kappa
+        self.simulator: AerSimulator = simulator
+        self.shot = shot
 
     def solve_lse_classical(self):
         """
@@ -33,7 +34,7 @@ class LSESolver:
 
         return x_solution
 
-    def solve_linear_system_quantum(self, statevector=True):
+    def solve_linear_system_quantum(self, statevector=False):
         """
         実際の量子デバイスでの連立一次方程式の解法
         """
@@ -102,7 +103,6 @@ class LSESolver:
         sys_wires = list(range(n_sys))  # |b⟩ を準備するワイヤ
         n_qubits = qsvt_circuit.num_qubits  # システム全体のqubit数
         sys_qubits = list(range(n_qubits))  # QSVT回路が作用する全ワイヤ
-        backend = Aer.get_backend(SIMULATOR)
 
         # 全基底状態の数（2^n_qubits）
         n_total_states = 2**n_qubits
@@ -178,13 +178,13 @@ class LSESolver:
                 # Step 4: 補助qubitのみを測定
                 test_circuit.measure(aux_qubit, 0)
 
-                print(test_circuit.draw(output="text"))
-
                 # ========================================
                 # 実行と結果取得
                 # ========================================
-                transpiled_circuit = transpile(test_circuit, backend)
-                result = backend.run(transpiled_circuit, shots=SHOTS).result()
+                transpiled_circuit = transpile(test_circuit, self.simulator)
+                result = self.simulator.run(
+                    transpiled_circuit, shots=self.shot
+                ).result()
                 counts = result.get_counts()
 
                 # ========================================
@@ -199,11 +199,6 @@ class LSESolver:
 
                 # Hadamardテストの結果: Re(⟨basis_idx|ψ⟩) = P(0) - P(1)
                 real_part = p0 - p1
-
-                print(f"測定結果: {counts}")
-                print(f"P(補助=0) = {p0:.4f}, P(補助=1) = {p1:.4f}")
-                print(f"実部推定値 (Re(α_{basis_idx})): {real_part:.4f}")
-
                 real_amplitudes[f"{basis_bits}"] = real_part
 
         # ========================================
