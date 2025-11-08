@@ -246,9 +246,22 @@ def collect_dfvqls_results_with_noise(
         np.random.seed(42)  # Fixed seed for reproducibility
         initial_params = np.random.uniform(0, 2 * np.pi, num_params)
         
+        # Track iterations and print progress
+        print(f"  Starting optimization (max_iter={num_iterations})...")
         x_solution, metadata, (num_circuit, den_circuit) = dfvqls_solver.solve(
             A_work, b_work, initial_params=initial_params, track_iterations=True
         )
+        
+        # Print iteration progress
+        iteration_history = metadata.get("iteration_history", [])
+        if iteration_history:
+            print(f"  Optimization progress: {len(iteration_history)}/{num_iterations} iterations completed")
+            # Print every 10 iterations or at the end
+            for i, iter_data in enumerate(iteration_history):
+                if (i + 1) % 10 == 0 or (i + 1) == len(iteration_history):
+                    print(f"    Iteration {i+1}/{num_iterations}: cost = {iter_data['cost']:.6f}")
+        else:
+            print(f"  Optimization completed: {metadata.get('iterations', 'unknown')} iterations")
         
         # Recover original solution if preconditioning was used
         if use_preconditioning:

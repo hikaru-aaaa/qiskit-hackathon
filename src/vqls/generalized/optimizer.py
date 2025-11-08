@@ -82,11 +82,16 @@ class Optimizer:
 
             # Store iteration data if tracking is enabled
             if iteration_history is not None:
+                iter_num = len(iteration_history)
                 iteration_history.append({
-                    'iteration': len(iteration_history),
+                    'iteration': iter_num,
                     'params': params.copy(),
                     'cost': float(cost)
                 })
+                
+                # Print progress every 10 iterations or at the end
+                if (iter_num + 1) % 10 == 0 or (iter_num + 1) == self.max_iter:
+                    print(f"    Iteration {iter_num + 1}/{self.max_iter}: cost = {cost:.6f}")
 
             return cost
 
