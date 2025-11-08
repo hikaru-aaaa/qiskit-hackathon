@@ -223,21 +223,16 @@ def load_result_list(filename: str) -> ResultList:
 
 
 def draw_result_plot(
-    result_list1: ResultList,
-    result_list2: ResultList,
+    result_lists: list[ResultList],
     title: str,
     use_depth_matched_dir: bool = False,
 ) -> None:
-    plt.plot(
-        [result.depth for result in result_list1.results],
-        [result.error for result in result_list1.results],
-        label=result_list1.name,
-    )
-    plt.plot(
-        [result.depth for result in result_list2.results],
-        [result.error for result in result_list2.results],
-        label=result_list2.name,
-    )
+    for result_list in result_lists:
+        plt.plot(
+            [result.depth for result in result_list.results],
+            [result.error for result in result_list.results],
+            label=result_list.name,
+        )
     plt.legend()
     plt.title(title)
     plt.xlabel("Depth")
@@ -260,7 +255,7 @@ def main() -> None:
         overwrite=True,
     )
 
-    has_noise_list = [True]
+    has_noise_list = [True, False]
     for has_noise in has_noise_list:
         if has_noise:
             service = QiskitRuntimeService()
@@ -269,56 +264,56 @@ def main() -> None:
         else:
             simulator = AerSimulator(method="statevector")
 
-        # 2x2 system
-        print("=" * 80)
-        print("Testing 2x2 system")
-        print("=" * 80)
-        title = f"2x2_kappa={kappa}_noise={has_noise}"
-        A, b = create_matrix_with_condition_number(2, kappa)
-        qsvt_results = collect_qsvt_results(
-            A, b, title, simulator, shot, use_depth_matched_dir=True
-        )
-        # Get max depth from QSVT results
-        qsvt_max_depth = max(result.depth for result in qsvt_results.results)
-        print(f"\nQSVT maximum depth: {qsvt_max_depth}")
-        print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-        dfvqls_results = collect_dfvqls_results(
-            A,
-            b,
-            title,
-            simulator,
-            shot,
-            qsvt_depth=qsvt_max_depth,
-            use_preconditioning=True,
-        )
-        draw_result_plot(
-            qsvt_results, dfvqls_results, title, use_depth_matched_dir=True
-        )
+        # # 2x2 system
+        # print("=" * 80)
+        # print("Testing 2x2 system")
+        # print("=" * 80)
+        # title = f"2x2_kappa={kappa}_noise={has_noise}"
+        # A, b = create_matrix_with_condition_number(2, kappa)
+        # qsvt_results = collect_qsvt_results(
+        #     A, b, title, simulator, shot, use_depth_matched_dir=True
+        # )
+        # # Get max depth from QSVT results
+        # qsvt_max_depth = max(result.depth for result in qsvt_results.results)
+        # print(f"\nQSVT maximum depth: {qsvt_max_depth}")
+        # print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
+        # dfvqls_results = collect_dfvqls_results(
+        #     A,
+        #     b,
+        #     title,
+        #     simulator,
+        #     shot,
+        #     qsvt_depth=qsvt_max_depth,
+        #     use_preconditioning=True,
+        # )
+        # draw_result_plot(
+        #     [qsvt_results, dfvqls_results], title, use_depth_matched_dir=True
+        # )
 
-        # 4x4 system
-        print("\n" + "=" * 80)
-        print("Testing 4x4 system")
-        print("=" * 80)
-        title = f"4x4_kappa={kappa}_noise={has_noise}"
-        A, b = create_matrix_with_condition_number(4, kappa)
-        qsvt_results = collect_qsvt_results(
-            A, b, title, simulator, shot, use_depth_matched_dir=True
-        )
-        qsvt_max_depth = max(result.depth for result in qsvt_results.results)
-        print(f"\nQSVT maximum depth: {qsvt_max_depth}")
-        print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-        dfvqls_results = collect_dfvqls_results(
-            A,
-            b,
-            title,
-            simulator,
-            shot,
-            qsvt_depth=qsvt_max_depth,
-            use_preconditioning=True,
-        )
-        draw_result_plot(
-            qsvt_results, dfvqls_results, title, use_depth_matched_dir=True
-        )
+        # # 4x4 system
+        # print("\n" + "=" * 80)
+        # print("Testing 4x4 system")
+        # print("=" * 80)
+        # title = f"4x4_kappa={kappa}_noise={has_noise}"
+        # A, b = create_matrix_with_condition_number(4, kappa)
+        # qsvt_results = collect_qsvt_results(
+        #     A, b, title, simulator, shot, use_depth_matched_dir=True
+        # )
+        # qsvt_max_depth = max(result.depth for result in qsvt_results.results)
+        # print(f"\nQSVT maximum depth: {qsvt_max_depth}")
+        # print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
+        # dfvqls_results = collect_dfvqls_results(
+        #     A,
+        #     b,
+        #     title,
+        #     simulator,
+        #     shot,
+        #     qsvt_depth=qsvt_max_depth,
+        #     use_preconditioning=True,
+        # )
+        # draw_result_plot(
+        #     [qsvt_results, dfvqls_results], title, use_depth_matched_dir=True
+        # )
 
         # 8x8 system
         print("\n" + "=" * 80)
@@ -329,21 +324,19 @@ def main() -> None:
         qsvt_results = collect_qsvt_results(
             A, b, title, simulator, shot, use_depth_matched_dir=True
         )
-        qsvt_max_depth = max(result.depth for result in qsvt_results.results)
-        print(f"\nQSVT maximum depth: {qsvt_max_depth}")
-        print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
-        dfvqls_results = collect_dfvqls_results(
-            A,
-            b,
-            title,
-            simulator,
-            shot,
-            qsvt_depth=qsvt_max_depth,
-            use_preconditioning=True,
-        )
-        draw_result_plot(
-            qsvt_results, dfvqls_results, title, use_depth_matched_dir=True
-        )
+        # qsvt_max_depth = max(result.depth for result in qsvt_results.results)
+        # print(f"\nQSVT maximum depth: {qsvt_max_depth}")
+        # print("Running DF-VQLS with matched depth budget (with preconditioning)...\n")
+        # dfvqls_results = collect_dfvqls_results(
+        #     A,
+        #     b,
+        #     title,
+        #     simulator,
+        #     shot,
+        #     qsvt_depth=qsvt_max_depth,
+        #     use_preconditioning=True,
+        # )
+        draw_result_plot([qsvt_results], title, use_depth_matched_dir=True)
 
         print("\n" + "=" * 80)
         print("All comparisons complete!")
